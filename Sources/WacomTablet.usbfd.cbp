@@ -1,0 +1,38 @@
+<?xml version="1.0" ?>
+<CodeBench_Project name="WacomTablet.usbfd" path="DH3:Sources&#047;WacomProject&#047;WacomTablet&#047;WacomTablet.usbfd.cbp" created="1076527482" lastmodified="1091406911">
+	<plugin name="PROGDIR:Plugins&#047;AmigaOS4SDK.CCPlugin" flags="0"/>
+	<label identifier="&#047;&#047;&#047;&#047;"/>
+	<target name="WacomTablet.usbfd"/>
+	<homedir name="DH3:Sources&#047;WacomProject&#047;WacomTablet"/>
+	<includedir name="DH3:Sources&#047;WacomProject&#047;WacomTablet"/>
+	<compiler name="SDK:gcc&#047;bin&#047;gcc" switches="-g -Wall  -Wwrite-strings" stack="131072"/>
+	<linker switches="-g -nostartfiles"/>
+	<debugger name="SDK:c&#047;gdb"/>
+	<header pattern="#?.(h|hpp|hxx)"/>
+	<source pattern="#?.(c|cpp|cc|cxx)"/>
+	<object pattern="#?.(o|lib|a)"/>
+	<other pattern="~(#?.h|#?.c|#?.cpp|#?.cc|#?.cxx|#?.o|#?.lib|#?.a)"/>
+	<builder name="SDK:c&#047;make -f"/>
+	<environment/>
+	<headers>
+		<file name="WacomTablet.h" current="0" open="1"/>
+	</headers>
+	<sources>
+		<file name="cx.c" current="0" open="1"/>
+		<file name="TabletList.c" current="0" open="1"/>
+		<file name="WacomHandler.c" current="1" open="1"/>
+		<file name="WacomTablet.c" current="0" open="1"/>
+		<file name="window.c" current="0" open="1"/>
+	</sources>
+	<others>
+		<file name="Readme.txt" current="0" open="1"/>
+		<file name="DH3:Sources&#047;WacomProject&#047;WacomTablet&#047;WacomTablet.fdclass" current="0" open="0"/>
+		<file name="GPL" current="0" open="0"/>
+	</others>
+	<flags value="495621"/>
+	<buildscript name="Makefile" depth="3" open="0"/>
+	<projectnotes open="1" current="0" top="0" left="0" line="0" row="0"/>
+	<buildwindow open="1"/>
+	<logfile name="RAM Disk:Build.log"/>
+	<repository plugin="PROGDIR:plugins&#047;svntool.syncplugin" lastcommit="1082247438" lastupdate="1082247438"/>
+</CodeBench_Project>

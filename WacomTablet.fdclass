@@ -1,0 +1,6 @@
+FUNCTIONDRIVER
+NAME      "WACOM Tablet Driver"
+VENDOR     0x056A
+TYPE      INTERFACE
+PRI       6
+DRIVER    "WacomTablet.usbfd"
