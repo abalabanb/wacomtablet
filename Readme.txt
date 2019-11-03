@@ -1,4 +1,4 @@
-Version 1.0
+Version 1.1
 
 This is a driver for Wacom Graphics Tablets. These tablets typically work with
 the driver from 'The Linux Wacom Project' under linux.
@@ -29,42 +29,42 @@ a usb slot.
 Usage
 -----
 
-The driver has a configuration GUI which is hidden by default by works as a
-commodity so can be brought up by pressing 'ctrl alt w' or via Exchange.
+The driver has a configuration GUI, which is hidden by default, that works as a
+commodity so it can be brought up by pressing 'ctrl alt w' or via Exchange.
 
-The GUI has two sides, the left shows the current position and pressure (in
-tablet coords) and below that the maximum values that have occured during this
-session. The right hand side shows the current settings, the range of tablet
-coords that are mapped onto the screen and the value of the pressure for maximum.
-
-In the centre there is an area for pressure testing. The current X and Y coords
-will be shown anywhere on the screen, but the current pressure will only be shown
-when pressing on the test area.
+The GUI is separated in four tabs, the last three allow to configure actions
+associated to, respectively, the Pen, the Mouse and the Tablet. On the opposite,
+the first tab is dedicated to the configuration of general options and display
+of current information. At the top of the tab is the name of the currently
+detected tablet. Below three parts are available: the left shows the current
+position and pressure (in tablet coords) and below that the maximum values that
+have occured during this session. The middle part is planed for future use. On
+the right hand side are the current settings, the range of tablet coords that
+are mapped onto the screen and the value of the pressure for maximum.
 
 You can move the pen arround and press on the nib to find the maximum values,
 then copy them to the settings, or choose a smaller area if you prefer. You
 might want to do that if your screen has a different aspect to your tablet,
 otherwise generally you will want the maximums.
 
-Beneath the pressure test area is a group of 7 sliders, these enable you to
-create a pressure sensitivity profile. The default is a linear just diagonal
-straight line. If you make the line curve  above the diagonal  you increase the
-sensitivity at lower presssures and if it curves below sensitivity decreases at
-lower pressure. If you slant the diagonal the other way then you invert the
-pressure so that a light touch acts as if hard. Beware this is very useful in
-some situation but some apps may not like it at all! 
-
-You can also choose whether to send NEWTABLET (recommended) or the old TABLET
-(for compatibility with old apps). (having allowed this option so far most apps
-I've tried work with NEWTABLET.) Also you have the option to send additional
-RAWMOUSE events, which enable some software such as popupmenu.class (< 53.8) to
-see the pointer movements.
+On the right side, you can choose whether to send NEWTABLET (recommended) or the
+old TABLET (for compatibility with old apps). (having allowed this option so far
+most apps I've tried work with NEWTABLET.) Also you have the option to send
+additional RAWMOUSE events, which enable some software such as popupmenu.class
+(< 53.8) to see the pointer movements.
 
 SAVE saves the settings and closes the window
 USE uses them for the curent session only,
-COPY MAXIMUMS copies the max values recorded in that session for you.
+SET TO MAXIMUMS copies the max values recorded in that session for you.
 
 The config is saved in the following preferences file: ENVARC:WacomPrefs.xml
+
+Disclaimers
+-----------
+
+Configuration of action 'showkey' is currently considered 'beta', it may freeze
+the machine if you try it.
+
 
 Supported tablet informations
 -----------------------------
@@ -101,18 +101,19 @@ Possible values for this tag are :
     9 BTN_TOOL_TRIPLETAP: a triple finger touch on touchable parts of the tablet
 
 
+
 Tested machines and OSes
 ------------------------
 
 Any AmigaOS4 supported machines should be ok, anyway it's been formally reported
 to work on:
 
-- AmigaOne XE/G4, AmigaOS 4.1 update 4
-- AmigaOne X1000, AmigaOS 4 beta
-- Sam 440, AmigaOS 4.1 update 4
-- Sam Flex 440, AmigaOS 4.1 update 4
-- Sam 460, AmigaOS 4 beta
-
+- AmigaOne XE/G4, AmigaOS 4.1 update 4+
+- AmigaOne X1000, AmigaOS 4.1 beta
+- Sam 440, AmigaOS 4.1 update 4+
+- Sam Flex 440, AmigaOS 4.1 update 4+
+- Sam 460, AmigaOS 4.1 beta
+- A1222, AmigaOS 4.1 beta
 
 Compatible Tablets (possibly)
 -----------------------------
@@ -130,8 +131,9 @@ Bamboo Fun4x6 CTE-450 (mr2)
 Bamboo One CTF-430 (Nick Clover)
 Intuos3 9x12 (mbrantley)
 Intuos2 12x12 XD-1212-U (Martin J.)
- 
-These are reported to work on linux with the same driver as my tablets uses:
+Saphire CTE-430 (Davebraco)
+
+These are reported to work on linux with the same driver as my tablet uses:
 
 Wacom Penpartner
 Wacom Graphire
@@ -162,6 +164,40 @@ Wacom ISDv4 90, 93, 9A, 9F, E2, E3
 
 History
 -------
+
+ 1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
+                               (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
+                                Bamboo pen & touch, graphire)
+ Intern 2015-02-xx  - Added: support for Intuos Pro tablets
+                    - Added: support for Bamboo One tablets
+                    - Added: support for Cintiq 13HD tablets
+                    - Updated: code updated to input-wacom 0.21.0
+                    - Fixed: random crash in prefs program after multiple
+                             attach/detach cycles
+                    - Fixed: mouse button would never get released
+                    - Added: error message in case of commodity creation
+                             failure
+                    - Fixed: used prefsobjects interface version 1
+                    - Added: Initial action handler
+ Intern 2013-03-xx  - Added: Icons by Davebraco
+                    - Fixed: Some compilation warnings
+                    - Fixed: Incorrect button count displayed in prefs GUI
+                    - Fixed: Warning about bad application.library version
+                             tag used when saving prefs
+                    - Updated: code updated to input-wacom 0.16.0
+                    - Fixed: Potential crash in prefs program due to
+                             unterminated label list
+                    - Fixed: Replaced deprecated functions by new ones
+                    - Added: Proper version handling mechanism
+ v1.1 - 2019-11-03  - Added: Icons by David 'Davebraco' Braconnier
+                    - Fixed: Some compilation warnings
+                    - Fixed: Incorrect button count displayed in prefs GUI
+                    - Fixed: Warning about bad application.library version
+                             tag used when saving prefs
+                    - Updated: source code updated to input-wacom v0.16.0
+                    - Fixed: Potential crash in prefs program due to
+                             unterminated label list
+                    - Fixed: Replaced deprecated functions by new ones
 
  v1.0 - 2012-08-01  - Added: tablet buttons configurability
  (Public release)   - Added: debuglevel env variable load

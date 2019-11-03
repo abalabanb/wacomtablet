@@ -9,9 +9,14 @@
 #
 
 CC = SDK:gcc/bin/gcc
-OBJ = \
-	 cx.o TabletList.o WacomHandler.o \
+OBJS = cx.o TabletList.o WacomHandler.o \
 	 WacomTablet.o window.o
+
+OBJS_REV = WacomTablet.usbfd_rev.o
+
+OBJS_PREFS = WacomPrefs.o TabletList.o
+
+OBJS_PREFS_REV = WacomPrefs_rev.o
 
 BIN = WacomTablet.usbfd
 
@@ -24,7 +29,7 @@ LDFLAGS = -g -nostartfiles
 LIBS = 
 #	add any extra linker libraries you want here
 
-.PHONY: all all-before all-after clean clean-custom
+.PHONY: all all-before all-after clean clean-custom revision
 
 all: all-before $(BIN) WacomPrefs all-after
 
@@ -35,30 +40,42 @@ all-after:
 #	You can add rules here to execute after the project is built
 
 clean: clean-custom
-	rm $(OBJ) $(BIN)
+	rm $(OBJS) $(OBJS_REV) $(OBJS_PREFS) $(OBJS_PREFS_REV) $(BIN)
 
-$(BIN): $(OBJ)
+$(BIN): WacomTablet_locale.h $(OBJS) $(OBJS_REV)
 #	Debug builds require the -g or -gstabs option in CFLAGS
 #	You may also need to move the LDFLAGS variable depending on the contents
-	$(CC) -o $(BIN).debug $(OBJ) $(LDFLAGS) $(LIBS)
+	$(CC) -o $(BIN).debug $(OBJS) $(OBJS_REV) $(LDFLAGS) $(LIBS)
 	strip $(BIN).debug -o $(BIN)
 
-WacomPrefs: WacomPrefs.o TabletList.o
+WacomPrefs: $(OBJS_PREFS) $(OBJS_PREFS_REV)
 	$(CC) -o $@.debug $^ -lauto
 	strip $@.debug -o $@
 
+WacomTablet.usbfd_rev.h : $(OBJS)
+	revbump WacomTablet.usbfd sub
+
+WacomPrefs_rev.h : $(OBJS)
+	revbump WacomPrefs sub
+
+revision:
+	revbump WacomTablet
+	revbump WacomPrefs
+
 cx.o: cx.c WacomTablet.h
-	$(CC) -c cx.c -o cx.o $(CFLAGS)
 
 TabletList.o: TabletList.c WacomTablet.h
-	$(CC) -c TabletList.c -o TabletList.o $(CFLAGS)
 
 WacomHandler.o: WacomHandler.c WacomTablet.h
-	$(CC) -c WacomHandler.c -o WacomHandler.o $(CFLAGS)
 
 WacomTablet.o: WacomTablet.c WacomTablet.h
-	$(CC) -c WacomTablet.c -o WacomTablet.o $(CFLAGS)
 
-window.o: window.c WacomTablet.h
-	$(CC) -c window.c -o window.o $(CFLAGS)
+window.o: WacomTablet_locale.h WacomTablet.h
 
+WacomTablet_locale.h: WacomTablet.cd
+	echo coucou
+	CatComp $< CFILE $@ NOCODE
+
+WacomTablet.usbfd_rev.o: WacomTablet.usbfd_rev.c WacomTablet.usbfd_rev.h
+
+WacomPrefs_rev.o: WacomPrefs_rev.c WacomPrefs_rev.h

@@ -1,0 +1,292 @@
+#language english
+#version 1
+#basename WacomTablet
+;
+; Generic messages
+MSG_MAIN_TITLE (//)
+Wacom Tablet Driver Control
+; Main prefs window title
+;
+MSG_TAB_MISC_TITLE (//)
+_Misc
+; Misc tab title
+;
+MSG_TAB_MISC_DETECTED (//)
+Detected tablet
+; Detected tablet label
+;
+MSG_TAB_MISC_CURRENT_X (//)
+Current X
+; Current X label
+;
+MSG_TAB_MISC_CURRENT_Y (//)
+Current Y
+; Current Y label
+;
+MSG_TAB_MISC_CURRENT_P (//)
+Current P
+; Current P label
+;
+MSG_TAB_MISC_MAX_X (//)
+Max X
+; Max X label
+;
+MSG_TAB_MISC_MAX_Y (//)
+Max Y
+; Max Y label
+;
+MSG_TAB_MISC_MAX_P (//)
+Max P
+; Max P label
+;
+MSG_TAB_MISC_PRESSURE_TEST (//)
+Pressure Test
+; Pressure test label
+;
+MSG_TAB_MISC_PRESSURE_CURVE (//)
+Pressure Curve
+; Pressure curve label
+;
+MSG_TAB_MISC_CURRENT_SETTINGS (//)
+Current Settings
+; Current settings label
+;
+MSG_TAB_MISC_TOP_X (//)
+Top X
+; Top X label
+;
+MSG_TAB_MISC_TOP_Y (//)
+Top Y
+; Top Y label
+;
+MSG_TAB_MISC_RANGE_X (//)
+Range X
+; Range X label
+;
+MSG_TAB_MISC_RANGE_Y (//)
+Range Y
+; Range Y label
+;
+MSG_TAB_MISC_RANGE_P (//)
+Range P
+; Range P label
+;
+MSG_USE_NEWTABLET (//)
+Use NEWTABLET
+; Use NEWTABLET label
+;
+MSG_USE_TABLET (//)
+Use TABLET
+; Use TABLET label
+;
+MSG_SWITCH_BUTTONS (//)
+Switch Buttons
+; Switch Buttons label
+;
+MSG_SEND_RAWMOUSE (//)
+Send RAWMOUSE
+; Send RAWMOUSE label
+;
+MSG_DEBUG_LEVEL (//)
+Debug level
+; Debug level label
+;
+MSG_TAB_PEN_TITLE (//)
+_Pen
+; Pen tab title
+;
+MSG_NIB_ACTION (//)
+Nib action
+; Nib action label
+;
+MSG_FIRST_STYLUS_BUTTON_ACTION (//)
+First Stylus button action
+;First Stylus button action label
+;
+MSG_SECOND_STYLUS_BUTTON_ACTION (//)
+Second stylus button action
+; Second stylus button action label
+;
+MSG_TAB_MOUSE_TITLE (//)
+_Mouse
+; Mouse tab title
+;
+MSG_LEFT_BUTTON_ACTION (//)
+Left button action
+; Left button action label
+;
+MSG_RIGHT_BUTTON_ACTION (//)
+Right button action
+; Right button action label
+;
+MSG_MIDDLE_BUTTON_ACTION (//)
+Middle button action
+; Middle button action label
+;
+MSG_TAB_TABLET_TITLE (//)
+_Tablet
+; Tablet tab title
+;
+MSG_1ST_BUTTON_ACTION (//)
+1st button action
+; 1st button action label
+;
+MSG_2ND_BUTTON_ACTION (//)
+2nd button action
+; 2nd button action label
+;
+MSG_3RD_BUTTON_ACTION (//)
+3rd button action
+; 3rd button action label
+;
+MSG_4TH_BUTTON_ACTION (//)
+4th button action
+; 4th button action label
+;
+MSG_5TH_BUTTON_ACTION (//)
+5th button action
+; 5th button action label
+;
+MSG_6TH_BUTTON_ACTION (//)
+6th button action
+; 6th button action label
+;
+MSG_7TH_BUTTON_ACTION (//)
+7th button action
+; 7th button action label
+;
+MSG_8TH_BUTTON_ACTION (//)
+8th button action
+; 8th button action label
+;
+MSG_9TH_BUTTON_ACTION (//)
+9th button action
+; 9th button action label
+;
+MSG_10TH_BUTTON_ACTION (//)
+10th button action
+; 10th button action label
+;
+MSG_11TH_BUTTON_ACTION (//)
+11th button action
+; 11th button action label
+;
+MSG_12TH_BUTTON_ACTION (//)
+12th button action
+; 12th button action label
+;
+MSG_13TH_BUTTON_ACTION (//)
+13th button action
+; 13th button action label
+;
+MSG_14TH_BUTTON_ACTION (//)
+14th button action
+; 14th button action label
+;
+MSG_15TH_BUTTON_ACTION (//)
+15th button action
+; 15th button action label
+;
+MSG_16TH_BUTTON_ACTION (//)
+16th button action
+; 16th button action label
+;
+MSG_17TH_BUTTON_ACTION (//)
+17th button action
+; 17th button action label
+;
+MSG_18TH_BUTTON_ACTION (//)
+18th button action
+; 18th button action label
+;
+MSG_19TH_BUTTON_ACTION (//)
+19th button action
+; 19th button action label
+;
+MSG_20TH_BUTTON_ACTION (//)
+20th button action
+; 20th button action label
+;
+MSG_21ST_BUTTON_ACTION (//)
+21st button action
+; 21st button action label
+;
+MSG_22ND_BUTTON_ACTION (//)
+22nd button action
+; 22nd button action label
+;
+MSG_23RD_BUTTON_ACTION (//)
+23rd button action
+; 23rd button action label
+;
+MSG_24TH_BUTTON_ACTION (//)
+24th button action
+; 24th button action label
+;
+MSG_ACTION_NONE (//)
+None
+; None action label
+;
+MSG_ACTION_CLICK (//)
+Click
+; Click action label
+;
+MSG_ACTION_MIDDLE_CLICK (//)
+Middle-click
+; Middle click action label
+;
+MSG_ACTION_RIGHT_CLICK (//)
+Right-click
+; Right click action label
+;
+MSG_ACTION_4TH_CLICK (//)
+4th button click
+; 4th click action label
+;
+MSG_ACTION_5TH_CLICK (//)
+5th button click
+; 5th click action label
+;
+MSG_ACTION_DOUBLE_CLICK (//)
+Double-click
+; Double click action label
+;
+MSG_ACTION_HOLD_CLICK (//)
+Hold click
+; Hold click action label
+;
+MSG_ACTION_SHOWKEY (//)
+Showkey
+; Showkey action label
+;
+MSG_ACTION_SWITCH_MODE (//)
+Switch mode
+; Switch mode label
+;
+MSG_ACTION_QUALIFIER (//)
+Qualifier
+; Qualifier label
+;
+MSG_ACTION_KEY (//)
+Key
+; Key action label
+;
+MSG_ACTION_RUN (//)
+Run
+; Run action label
+;
+MSG_ACTION_DEFAULT (//)
+Default
+; Default action label
+;
+MSG_SAVE (//)
+Save
+; Save button
+;
+MSG_SET_MAXIMUMS (//)
+Set To Maximums
+; Set To Maximums
+;
+MSG_USE (//)
+Use
+; Use

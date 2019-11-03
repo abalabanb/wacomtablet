@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
+ * Copyright 2012-2019 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
  * Copyright 2011 Andy Broad <andy@broad.ology.org.uk>
  * Copyright 2005 Rene W. Olsen <ac@rebels.com>
  * All rights reserved.
@@ -40,6 +40,7 @@
 #include <proto/intuition.h>
 #include <proto/utility.h>
 #include <proto/slider.h>
+#include <proto/locale.h>
 #include <proto/application.h>
 
 #include <intuition/intuition.h>
@@ -66,6 +67,11 @@
 #include <strings.h>
 #include <stdio.h>
 
+#define CATCOMP_NUMBERS
+#define CATCOMP_STRINGS
+#define CATCOMP_BLOCK
+#include "WacomTablet_locale.h"
+
 /*------------------------------------------------------------------------*/
 
 #ifdef __GNUC__
@@ -82,18 +88,12 @@
 #define USBHID_PROTOCOL_MOUSE           2
 
 //// Bit handling macros
-#define SETBITS(var,bit,value) if (value) var|=(1<<bit); else var&=~(1<<bit);
+#define SETBITS(var,bit,value) if (value) var|=(((typeof(var))1)<<bit); else var&=~(((typeof(var))1)<<bit);
 #define FLAG(bit) (1L<<(bit)) 
 ////
-#define STRING(a) #a
 
-/* Version Tag */
-#define LIBVERSION      0
-#define LIBREVISION     7
 #define LIBPRI          -46
 #define LIBNAME         "WacomTablet.usbfd"
-#define VSTRING         "WacomTablet.usbfd " STRING(LIBVERSION) "." STRING(LIBREVISION) " (10-05-2012)\r\n"
-#define VERSTAG         "\0$VER: WacomTablet.usbfd " STRING(LIBVERSION) "." STRING(LIBREVISION) " (10-05-2012)"
 
 /* Structs */
 struct WacomTabletIFace {
@@ -113,14 +113,14 @@ struct WacomTabletBase {
     APTR                        rmb_Pred;        // Pointer to previous (predecessor)
     uint8                       rmb_Type;
     int8                        rmb_Pri;         // Priority, for sorting
-    STRPTR                      rmb_Name;        // ID string, null terminated
+    CONST_STRPTR                rmb_Name;        // ID string, null terminated
     uint8                       rmb_Flags;       // see below
     uint8                       rmb_ABIVersion;  // ABI exported by library
     uint16                      rmb_NegSize;     // number of bytes before LIB
     uint16                      rmb_PosSize;     // number of bytes after LIB
     uint16                      rmb_Version;     // major
     uint16                      rmb_Revision;    // minor
-    STRPTR                      rmb_IdString;    // ASCII identification
+    CONST_STRPTR                rmb_IdString;    // ASCII identification
     uint32                      rmb_Sum;         // the system-calculated checksum
     uint16                      rmb_OpenCnt;     // number of current opens
     APTR                        rmb_SegmentList;
@@ -132,6 +132,17 @@ struct WacomTabletBase {
 
     APTR                        rmb_fdkey;
 };
+
+struct LocaleInfo
+{
+#ifndef __amigaos4__
+    struct Library     *li_LocaleBase;
+#else
+    struct LocaleIFace *li_ILocale;
+#endif
+    struct Catalog     *li_Catalog;
+};
+
 
 #define USE_NEWTABLET    0x0001
 #define USE_TABLET       0x0002
@@ -158,8 +169,8 @@ enum ButtonActionType {
     ACTION_RIGHT_CLIC,
     ACTION_4TH_CLIC,
     ACTION_5TH_CLIC,
-    ACTION_DOUBLE_CLIC,
-    ACTION_HOLD_CLIC,
+//    ACTION_DOUBLE_CLIC,
+//    ACTION_HOLD_CLIC,
     ACTION_SHOWKEY,
     ACTION_SWITCH_MODE,
     ACTION_QUALIFIER,
@@ -171,7 +182,7 @@ enum ButtonActionType {
 struct ButtonAction
 {
     enum ButtonActionType ba_action;
-    APTR ba_parameter;
+    CONST_APTR ba_parameter;
     LONG ba_paramSize;
 };
 
@@ -184,7 +195,11 @@ enum {
     PTU,
     PL,
     DTU,
-    BAMBOO_PT,
+    DTUS,
+    DTUS2,
+    DTUSX,
+    DTH1152,
+    DTK2451,
     INTUOS,
     INTUOS3S,
     INTUOS3,
@@ -192,18 +207,50 @@ enum {
     INTUOS4S,
     INTUOS4,
     INTUOS4L,
-    WACOM_24HD,
+    INTUOS5S,
+    INTUOS5,
+    INTUOS5L,
+    INTUOSPS,
+    INTUOSPM,
+    INTUOSPL,
     WACOM_21UX2,
+    WACOM_22HD,
+    DTK,
+    WACOM_24HD,
+    WACOM_27QHD,
+    CINTIQ_HYBRID,
+    CINTIQ_COMPANION_2,
+    WACOM_MSPRO,
+    CINTIQ_16,
     CINTIQ,
     WACOM_BEE,
+    WACOM_13HD,
     WACOM_MO,
-    TABLETPC,
+    INTUOSHT,
+    INTUOSHT2,
+    BAMBOO_PT,
+    WACOM_24HDT,
+    WACOM_27QHDT,
+    WACOM_MSPROT,
+    DTH1152T,
+    INTUOSP2,
+    INTUOSP2S,
+    INTUOSHT3,
+    WIRELESS,
+    REMOTE,
+    TABLETPC,   /* add new TPC below */
+    TABLETPCE,
     TABLETPC2FG,
+    DTH2452T,
+    MTSCREEN,
+    MTTPC,
+    MTTPC_B,
+    MTTPC_C,
     MAX_TYPE
 };
 
 /* maximum packet length for USB devices */
-#define WACOM_PKGLEN_MAX    32
+#define WACOM_PKGLEN_MAX    192
 
 /* packet length for individual models */
 #define WACOM_PKGLEN_PENPRTN     7
@@ -211,17 +258,58 @@ enum {
 #define WACOM_PKGLEN_BBFUN       9
 #define WACOM_PKGLEN_INTUOS     10
 #define WACOM_PKGLEN_TPC1FG      5
+#define WACOM_PKGLEN_TPC1FG_B   10
 #define WACOM_PKGLEN_TPC2FG     14
 #define WACOM_PKGLEN_BBTOUCH    20
+#define WACOM_PKGLEN_BBTOUCH3   64
+#define WACOM_PKGLEN_BBPEN      10
+#define WACOM_PKGLEN_WIRELESS   32
+#define WACOM_PKGLEN_MTOUCH     62
+#define WACOM_PKGLEN_MTTPC      40
+#define WACOM_PKGLEN_DTUS       68
+#define WACOM_PKGLEN_PENABLED    8
+#define WACOM_PKGLEN_27QHDT     64
+#define WACOM_PKGLEN_MSPRO      64
+#define WACOM_PKGLEN_MSPROT     50
+#define WACOM_PKGLEN_INTUOSP2   64
+#define WACOM_PKGLEN_INTUOSP2T  44
+#define WACOM_PKGLEN_DTH1152    12
 
 /* wacom data packet report IDs */
 enum {
-    WACOM_REPORT_PENABLED       = 2,
-    WACOM_REPORT_INTUOSREAD     = 5, 
-    WACOM_REPORT_INTUOSWRITE    = 6, 
-    WACOM_REPORT_INTUOSPAD      = 12,
-    WACOM_REPORT_TPC1FG         = 6,     
-    WACOM_REPORT_TPC2FG         = 13,    
+    WACOM_REPORT_PENABLED           = 2,
+    WACOM_REPORT_INTUOS_ID1         = 5,
+    WACOM_REPORT_INTUOS_ID2         = 6,
+    WACOM_REPORT_INTUOSPAD          = 12,
+    WACOM_REPORT_INTUOS5PAD         = 3,
+    WACOM_REPORT_DTUSPAD            = 21,
+    WACOM_REPORT_TPC1FG             = 6,
+    WACOM_REPORT_TPC2FG             = 13,
+/*
+    WACOM_REPORT_TPCMT              = 13,
+    WACOM_REPORT_TPCMT2             = 3,
+    WACOM_REPORT_TPCHID             = 15,
+    WACOM_REPORT_TPCST              = 16,
+*/
+    WACOM_REPORT_CINTIQ             = 16,
+//    WACOM_REPORT_MSPRO              = 16,
+    WACOM_REPORT_INTUOS_PEN         = 16,
+    WACOM_REPORT_CINTIQPAD          = 17,
+    WACOM_REPORT_DTUS               = 17,
+/*    WACOM_REPORT_MSPROPAD           = 17,
+    WACOM_REPORT_TPC1FGE            = 18,
+    WACOM_REPORT_MSPRODEVICE        = 19,
+*/
+    WACOM_REPORT_DTK2451PAD         = 21,
+/*
+    WACOM_REPORT_24HDT              = 1,
+    WACOM_REPORT_WL                 = 128,
+*/
+    WACOM_REPORT_USB                = 192,
+//    WACOM_REPORT_DEVICE_LIST        = 16,
+//    WACOM_REPORT_REMOTE             = 17,
+//    WACOM_REPORT_VENDOR_DEF_TOUCH   = 33,
+//    WAC_CMD_LED_CONTROL_GENERIC     = 50,
 
 } WacomReportID;
 
@@ -237,7 +325,7 @@ enum {
     BTN_TOOL_LENS, 
     BTN_TOOL_DOUBLETAP,
     BTN_TOOL_TRIPLETAP,
-//    BTN_TOOL_QUADTAP,
+    BTN_TOOL_QUADTAP,
 //    BTN_TOOL_QUINTTAP
 } WacomToolType;
 
@@ -251,36 +339,61 @@ enum {
 
 } WacomDeviceID;
 
+/* ABS parameters */
+enum {
+    ABS_WHEEL,
+    ABS_TILT_X,
+    ABS_TILT_Y,
+    ABS_X,
+    ABS_Y,
+    ABS_Z,
+    ABS_RX,
+    ABS_RY,
+    ABS_RZ,
+    ABS_DISTANCE,
+    ABS_THROTTLE,
+} AbsParameters;
+
 /* Wacom BTN type */
 enum {
-    BTN_LEFT    = 31,
-    BTN_MIDDLE  = 30,
-    BTN_RIGHT   = 29,
-    BTN_SIDE    = 28,
-    BTN_EXTRA   = 27,
-    BTN_TOUCH   = 26,
-    BTN_STYLUS  = 25,
-    BTN_STYLUS2 = 24,
-    
-    BTN_BASE3   = 18,
-    BTN_BASE2   = 17,
-    BTN_BASE    = 16,
-    BTN_Z       = 15,
-    BTN_Y       = 14,
-    BTN_X       = 13,
-    BTN_C       = 12,
-    BTN_B       = 11,
-    BTN_A       = 10,
-    BTN_9       = 9,
-    BTN_8       = 8,
-    BTN_7       = 7,
-    BTN_6       = 6,
-    BTN_5       = 5,
-    BTN_4       = 4,
-    BTN_3       = 3,
-    BTN_2       = 2,
-    BTN_1       = 1,
-    BTN_0       = 0,
+    BTN_STYLUS3             = 37,
+    SW_MUTE_DEVICE          = 36,
+    KEY_INFO                = 35,
+    KEY_BUTTONCONFIG        = 34,
+    KEY_ONSCREEN_KEYBOARD   = 33,
+    KEY_CONTROLPANEL        = 32,
+    BTN_LEFT                = 31,
+    BTN_MIDDLE              = 30,
+    BTN_RIGHT               = 29,
+    BTN_SIDE                = 28,
+    BTN_EXTRA               = 27,
+    BTN_TOUCH               = 26,
+    BTN_STYLUS              = 25,
+    BTN_STYLUS2             = 24,
+    BTN_FORWARD             = 23,
+    BTN_BACK                = 22,
+    KEY_PROG3               = 21,
+    KEY_PROG2               = 20,
+    KEY_PROG1               = 19,
+    BTN_BASE3               = 18,
+    BTN_BASE2               = 17,
+    BTN_BASE                = 16,
+    BTN_Z                   = 15,
+    BTN_Y                   = 14,
+    BTN_X                   = 13,
+    BTN_C                   = 12,
+    BTN_B                   = 11,
+    BTN_A                   = 10,
+    BTN_9                   = 9,
+    BTN_8                   = 8,
+    BTN_7                   = 7,
+    BTN_6                   = 6,
+    BTN_5                   = 5,
+    BTN_4                   = 4,
+    BTN_3                   = 3,
+    BTN_2                   = 2,
+    BTN_1                   = 1,
+    BTN_0                   = 0,
 } WacomButtons;
 
 struct wacom_features {
@@ -291,11 +404,27 @@ struct wacom_features {
     int pressure_max;
     int distance_max;
     int type;
+    int x_resolution;
+    int y_resolution;
+    int numbered_buttons;
+    int offset_left;
+    int offset_right;
+    int offset_top;
+    int offset_bottom;
     int device_type;
     int x_phy;
     int y_phy;
     unsigned char unit;
     unsigned char unitExpo;
+    int x_fuzz;
+    int y_fuzz;
+    int pressure_fuzz;
+    int distance_fuzz;
+    int tilt_fuzz;
+    unsigned quirks;
+    unsigned touch_max;
+    int oVid;
+    int oPid;
 };
 
 struct wacom_device {
@@ -364,6 +493,11 @@ enum {
     GID_BTN_BASE,
     GID_BTN_BASE2,
     GID_BTN_BASE3,
+    GID_BTN_PROG1,
+    GID_BTN_PROG2,
+    GID_BTN_PROG3,
+    GID_BTN_BACK,
+    GID_BTN_FORWARD,
             
     GID_LAST
 } gids;
@@ -389,6 +523,7 @@ struct usbtablet {
     struct Library *        USBSysBase;
     struct USBSysIFace *    IUSBSys;
 
+    struct LocaleInfo       localeInfo;
 
     struct Task *           TaskAddr;
     uint32                  TaskOldPri;
@@ -419,8 +554,13 @@ struct usbtablet {
     struct USBBusIntDsc *   IntDsc;
 
     uint32                  TheEnd;
-    uint32                  Buttons;
+    uint64                  Buttons;        // Latest tablet buttons states as reported by last tablet message
+    uint64                  PrevButtons;    // Previous buttons states (usefull for execute actionshandling)n
     uint16                  Qual;
+
+    uint8                   PrevKbdCode[2]; // Previous code/qualifier for InputEvent generation
+    uint8                   PrevKbdQual[2];
+
 
     struct Library *        CxBase;
     struct CommoditiesIFace* ICommodities;
@@ -436,9 +576,9 @@ struct usbtablet {
     struct Library*         UtilityBase;
     struct UtilityIFace*    IUtility;
 
-	struct Library *		ApplicationBase;
-	struct ApplicationIFace* IApplication;
-	struct PrefsObjectsIFace* IPrefsObjects;
+    struct Library *        ApplicationBase;
+    struct ApplicationIFace* IApplication;
+    struct PrefsObjectsIFace* IPrefsObjects;
 
 
     struct  ClassLibrary *  WindowClassLib;
@@ -485,16 +625,17 @@ struct usbtablet {
     struct Gadget*          gadgets[GID_LAST];
     
     // capabilities
-    const struct wacom_features*  features;
-    uint32                  buttonCapabilities;
-    uint32                  toolCapabilities;
-    uint32                  maxZ;
-    int32                   minWheel;
-    int32                   maxWheel;
-    int32                   minThrottle;
-    int32                   maxThrottle;
+    struct wacom_features*  features;
+    uint64                  buttonCapabilities;
+    uint64                  toolCapabilities;
+    uint8                   touch_arbitration;
+    int32                   minX, maxX, fuzzX;
+    int32                   minY, maxY, fuzzY;
+    int32                   minZ, maxZ, fuzzZ;
+    int32                   minWheel, maxWheel, fuzzWheel;
+    int32                   minThrottle, maxThrottle, fuzzThrottle;
 
-    struct ButtonAction     buttonAction[32];
+    struct ButtonAction     buttonAction[64];
 
     uint8                   debugLevel;
 
@@ -507,13 +648,17 @@ struct usbtablet {
 
     uint32                  Pressure;
     UWORD                   Curve[7];
-    UBYTE                   id[3];
-    UBYTE                   tool[3];
-    uint32                  distance[3];
-    BOOL                    proximity[3];
+    uint32                  id[2];
+    UBYTE                   tool[2];
+    uint32                  distance[2];
+    BOOL                    proximity[2];
     int32                   wheel[2];
+    BOOL                    touch_down;
+    BOOL                    stylus_in_proximity;
+    BOOL                    reporting_data;
+    int*                    slots;
 
-    int32                   last_finger;
+    BOOL                    inputPropDirect;
 };
 
 //// Debug macro
@@ -568,8 +713,14 @@ uint32                  ConvertPressure(struct usbtablet *um, uint32 pressure);
 uint32                  SendWheelEvent(struct usbtablet *um, int32 horizWheel, int32 vertWheelData, BOOL relative);
 uint32                  SendMouseEvent(struct usbtablet *um, uint32 buttons);
 uint32                  SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons);
+uint32                  SendRawKeyEvent(struct usbtablet *um, uint32 buttons);
+uint32                  HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint32 buttons);
 
 void                    WacomSetupCapabilities(struct usbtablet *um);
+CONST_STRPTR            GetString(struct LocaleInfo *li, LONG stringNum);
+
+void                    SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, int32 fuzz, int32 flat);
+
 ////
 
 /*------------------------------------------------------------------------*/

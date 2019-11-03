@@ -1,45 +1,88 @@
 /*
-Comodities support GUI
-*/
+ * Comodities support GUI
+ *
+ * Copyright 2012-2018 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
+ * Copyright 2011 Andy Broad <andy@broad.ology.org.uk>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *   - Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *
+ *   - Neither the names of Alexandre Balaban or Andy Broad nor the names
+ *     of contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include "WacomTablet.h"
 
 #define PREFS_DICT_RANGE "Range"
-	#define PREFS_KEY_TOP_X "TopX"
-	#define PREFS_KEY_TOP_Y "TopY"
-	#define PREFS_KEY_RANGE_X "RangeX"
-	#define PREFS_KEY_RANGE_Y "RangeY"
-	#define PREFS_KEY_RANGE_P "RangeP"
+    #define PREFS_KEY_TOP_X "TopX"
+    #define PREFS_KEY_TOP_Y "TopY"
+    #define PREFS_KEY_RANGE_X "RangeX"
+    #define PREFS_KEY_RANGE_Y "RangeY"
+    #define PREFS_KEY_RANGE_P "RangeP"
 #define PREFS_DICT_EVENTS "Events"
-	#define PREFS_KEY_EVENT_TYPE "EventType"
-	#define PREFS_KEY_SWITCH_BUTS "SwitchButtons"
-	#define PREFS_KEY_RAWMOUSE "SendRawMouse"
+    #define PREFS_KEY_EVENT_TYPE "EventType"
+    #define PREFS_KEY_SWITCH_BUTS "SwitchButtons"
+    #define PREFS_KEY_RAWMOUSE "SendRawMouse"
 #define PREFS_DICT_CURVES "Curves"
 #define PREFS_ARRAY_ACTION_MAPPING "ActionMapping"
-	#define PREFS_KEY_ACTION "Action"
-	#define PREFS_KEY_PARAMETER "Parameter"
+    #define PREFS_KEY_ACTION "Action"
+    #define PREFS_KEY_PARAMETER "Parameter"
 
-STRPTR tabLabels[] = { "_Misc","_Pen","_Mouse", "_Tablet", NULL };
-STRPTR buttonActionLabels[] = { 
-    "None",
-    "Clic",
-    "Middle-clic",
-    "Right-clic",
-    "4th button clic",
-    "5th button clic",
-//    "Double-clic",
-//    "Hold clic",
-//    "Showkey",
-//    "Switch mode",
-//    "Qualifier",
-//    "Key",
-//    "Run",
-//    "Default"
+const LONG tabLabelIDs[] = { MSG_TAB_MISC_TITLE, MSG_TAB_PEN_TITLE, MSG_TAB_MOUSE_TITLE, MSG_TAB_TABLET_TITLE, 0 };
+CONST_STRPTR tabLabels[sizeof(tabLabelIDs)] = {NULL};
+const LONG buttonActionLabelIDs[] = {
+    MSG_ACTION_NONE,
+    MSG_ACTION_CLICK,
+    MSG_ACTION_MIDDLE_CLICK,
+    MSG_ACTION_RIGHT_CLICK,
+    MSG_ACTION_4TH_CLICK,
+    MSG_ACTION_5TH_CLICK,
+//    MSG_ACTION_DOUBLE_CLICK,
+//    MSG_ACTION_HOLD_CLICK,
+    MSG_ACTION_SHOWKEY,
+//    MSG_ACTION_SWITCH_MODE,
+//    MSG_ACTION_QUALIFIER,
+//    MSG_ACTION_KEY,
+//    MSG_ACTION_RUN,
+//    MSG_ACTION_DEFAULT,
+    0
  };
+CONST_STRPTR buttonActionLabels[sizeof(buttonActionLabelIDs)] = {NULL};
 
 
 BOOL OpenClasses(struct usbtablet *um)
 {
+    int i = 0;
+    while(tabLabelIDs[i])
+    {
+        DebugLog(40, um, "translating, i=%d tabLabels[i]=%d", i, tabLabelIDs[i]);
+        tabLabels[i] = GetString(&um->localeInfo, (LONG)tabLabelIDs[i]);
+        i++;
+    }
+    i = 0;
+    while(buttonActionLabelIDs[i])
+    {
+        buttonActionLabels[i] = GetString(&um->localeInfo, (LONG)buttonActionLabelIDs[i]);
+        i++;
+    }
 
     if(!(um->WindowClassLib = um->IIntuition->OpenClass("window.class",0,&um->WindowClassPtr)))
     {
@@ -177,630 +220,427 @@ VOID DisposeWindow(struct usbtablet *um)
 
 Object *CreateWindow(struct usbtablet *um)
 {
-    uint8 i = 0;
-
     if (um->Window)
     {
         DisposeWindow(um);
     }
+
+    DebugLog(35, um, "buttonCapabilities is %08lx\n", um->buttonCapabilities);
 
     um->windowLayout = (struct Gadget *)um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
         LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
         LAYOUT_SpaceOuter,  TRUE,
         LAYOUT_DeferLayout, TRUE,
 
-		LAYOUT_AddChild, um->gadgets[GID_CLICKTAB] = (struct Gadget *)um->IIntuition->NewObject(um->ClickTabClassPtr, NULL,
-			GA_ID, GID_CLICKTAB,
-			GA_RelVerify, TRUE,
-			GA_Text, tabLabels,
+        LAYOUT_AddChild, um->gadgets[GID_CLICKTAB] = (struct Gadget *)um->IIntuition->NewObject(um->ClickTabClassPtr, NULL,
+            GA_ID, GID_CLICKTAB,
+            GA_RelVerify, TRUE,
+            GA_Text, tabLabels,
 
-			CLICKTAB_PageGroup, um->IIntuition->NewObject(NULL, "page.gadget",
-				/* We will defer layout/render changing pages! */
-				LAYOUT_DeferLayout, TRUE,
+            CLICKTAB_PageGroup, um->IIntuition->NewObject(NULL, "page.gadget",
+                /* We will defer layout/render changing pages! */
+                LAYOUT_DeferLayout, TRUE,
 
-				PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
+                PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
                     LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
                     LAYOUT_SpaceOuter,  TRUE,
                     LAYOUT_DeferLayout, TRUE,
 
-    		        LAYOUT_AddChild, um->IIntuition->NewObject(um->StringClassPtr, NULL,
-    		        	GA_ReadOnly,TRUE,
-    		        	STRINGA_TextVal, um->features->name,
-        		        TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		                LABEL_Text,"Detected tablet",
-		                TAG_END),
-    		        	
-    		        LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    		            LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-    		            LAYOUT_SpaceOuter,  TRUE,
-    		            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    		                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-    		                LAYOUT_SpaceOuter,  TRUE,
-    		
-    		                LAYOUT_AddChild, um->gadgets[GID_CURRENTX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_CURRENTX,
-    		                        INTEGER_Arrows,FALSE,
-    		                        GA_ReadOnly,TRUE,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Curent X",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_CURRENTY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_CURRENTY,
-    		                        GA_ReadOnly,TRUE,
-    		                        INTEGER_Arrows,FALSE,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Current Y",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_CURRENTP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_CURRENTP,
-    		                        GA_ReadOnly,TRUE,
-    		                        INTEGER_Arrows,FALSE,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Current P",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_MAXX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_MAXX,
-    		                        GA_ReadOnly,TRUE,
-    		                        INTEGER_Arrows,FALSE,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Max X",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_MAXY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_MAXY,
-    		                        GA_ReadOnly,TRUE,
-    		                        INTEGER_Arrows,FALSE,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Max Y",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_MAXP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_MAXP,
-    		                        GA_ReadOnly,TRUE,
-    		                        INTEGER_Arrows,FALSE,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Max P",
-    		                    TAG_END),
-    		
-    		                TAG_END),
-    		
-    		            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    		                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-    		                LAYOUT_SpaceOuter,  TRUE,
-    		                LAYOUT_BevelStyle,BVS_GROUP,
-    		                LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    			                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-    			                LAYOUT_SpaceOuter,  TRUE,
-    			                LAYOUT_BevelStyle,BVS_GROUP,
-    			                LAYOUT_Label,"Pressure Test",
-    			
-    			                LAYOUT_AddChild, um->gadgets[GID_PTEST] = (struct Gadget *)um->IIntuition->NewObject(um->SpaceClassPtr, NULL,
-    			                        GA_ID, GID_PTEST,
-    			                        GA_RelVerify,TRUE,
-    			                    TAG_END),
-    			                TAG_END),
-    		                LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    			                LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
-    			                LAYOUT_SpaceOuter,  TRUE,
-    			                LAYOUT_BevelStyle,BVS_GROUP,
-    			                LAYOUT_Label,"Pressure Curve",
-    			                LAYOUT_AddChild,um->gadgets[GID_PCURVE0] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,                                
-    		                                SLIDER_Level,um->Curve[0],
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE0,
-    		                            TAG_END),
-    			                 LAYOUT_AddChild,um->gadgets[GID_PCURVE1] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,                                
-    		                                SLIDER_Level,um->Curve[1],                                
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE1,
-    		                            TAG_END),                            
-    			                 LAYOUT_AddChild,um->gadgets[GID_PCURVE2] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,
-    		                                SLIDER_Level,um->Curve[2],                                
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE2,
-    		                            TAG_END),
-    			                 LAYOUT_AddChild,um->gadgets[GID_PCURVE3] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,                                
-    		                                SLIDER_Level,um->Curve[3],                                
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE3,
-    		                            TAG_END),
-    			                 LAYOUT_AddChild,um->gadgets[GID_PCURVE4] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,                                
-    		                                SLIDER_Level,um->Curve[4],                                
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE4,
-    		                            TAG_END),              
-    			                 LAYOUT_AddChild,um->gadgets[GID_PCURVE5] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,                                
-    		                                SLIDER_Level,um->Curve[5],                                
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE5,
-    		                            TAG_END),            
-    			                 LAYOUT_AddChild,um->gadgets[GID_PCURVE6] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,100,
-    		                                SLIDER_Invert,TRUE,                                
-    		                                SLIDER_Level,um->Curve[6],                                
-    		                                SLIDER_Orientation,SORIENT_VERT,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_PCURVE6,
-    		                            TAG_END),                                                                                                                                              
-    			                TAG_END), // layout
-    						TAG_END),  // layout
-    		            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    		                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-    		                LAYOUT_SpaceOuter,  TRUE,
-    		                LAYOUT_BevelStyle,BVS_GROUP,
-    		                LAYOUT_Label,"Current Settings",
-    		                LAYOUT_AddChild, um->gadgets[GID_TOPX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_TOPX,
-    		                        INTEGER_Number,(ULONG)um->TopX,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Top X",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_TOPY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_TOPY,
-    		                        INTEGER_Number,(ULONG)um->TopY,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Top Y",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_RANGEX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_RANGEX,
-    		                        INTEGER_Number,(ULONG)um->RangeX,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Range X",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_RANGEY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_RANGEY,
-    		                        INTEGER_Number,(ULONG)um->RangeY,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Range Y",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_RANGEP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
-    		                        GA_ID, GID_RANGEP,
-    		                        INTEGER_Number,(ULONG)um->RangeP,
-    		                    TAG_END),
-    		                CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		                    LABEL_Text,"Range P",
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_NEWTABLET] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
-    		                        GA_ID, GID_NEWTABLET,
-    		                        GA_Text,"Use NEWTABLET",
-    		                        GA_Selected,(ULONG)(um->EventType & USE_NEWTABLET),
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_TABLET] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
-    		                        GA_ID, GID_TABLET,
-    		                        GA_Text,"Use TABLET",
-    		                        GA_Selected,(ULONG)(um->EventType & USE_TABLET),
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_SWITCH] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
-    		                        GA_ID, GID_SWITCH,
-    		                        GA_Text,"Switch Buttons",
-    		                        GA_Selected,(ULONG)(um->SwitchButtons),
-    		                    TAG_END),
-    		                LAYOUT_AddChild, um->gadgets[GID_RAWMOUSE] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
-    		                        GA_ID, GID_RAWMOUSE,
-    		                        GA_Text,"Send RAWMOUSE",
-    		                        GA_Selected,(ULONG)(um->SendRawMouse),
-    		                    TAG_END),
-    		
-        		            TAG_END), //layout
-        		        TAG_END), // layout
-    		
-    		        LAYOUT_AddChild, um->gadgets[GID_DEBUGLEVEL] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
-    		                                SLIDER_Min,0,
-    		                                SLIDER_Max,50,
-    		                                SLIDER_Invert,FALSE,                                
-    		                                SLIDER_Level,um->debugLevel,                                
-    		                                SLIDER_Orientation,SORIENT_HORIZ,
-    		                                GA_RelVerify,TRUE,
-    		                                GA_ID,GID_DEBUGLEVEL,
-    		                            TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"Debug level",
-    					TAG_END),
-        			TAG_END), // Misc Page layout
+                    LAYOUT_AddChild, um->IIntuition->NewObject(um->StringClassPtr, NULL,
+                        GA_ReadOnly,TRUE,
+                        STRINGA_TextVal, um->features->name,
+                        TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_DETECTED),
+                        TAG_END),
+                        
+                    LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                        LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+                        LAYOUT_SpaceOuter,  TRUE,
+                        LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                            LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                            LAYOUT_SpaceOuter,  TRUE,
+            
+                            LAYOUT_AddChild, um->gadgets[GID_CURRENTX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_CURRENTX,
+                                    INTEGER_Arrows,FALSE,
+                                    GA_ReadOnly,TRUE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_X),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_CURRENTY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_CURRENTY,
+                                    GA_ReadOnly,TRUE,
+                                    INTEGER_Arrows,FALSE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_Y),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_CURRENTP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_CURRENTP,
+                                    GA_ReadOnly,TRUE,
+                                    INTEGER_Arrows,FALSE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_P),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_MAXX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_MAXX,
+                                    GA_ReadOnly,TRUE,
+                                    INTEGER_Arrows,FALSE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_MAX_X),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_MAXY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_MAXY,
+                                    GA_ReadOnly,TRUE,
+                                    INTEGER_Arrows,FALSE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_MAX_Y),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_MAXP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_MAXP,
+                                    GA_ReadOnly,TRUE,
+                                    INTEGER_Arrows,FALSE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_MAX_P),
+                                TAG_END),
+            
+                            TAG_END),
+            
+                        LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                            LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                            LAYOUT_SpaceOuter,  TRUE,
+                            /*LAYOUT_BevelStyle,BVS_GROUP,
+                            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                                LAYOUT_SpaceOuter,  TRUE,
+                                LAYOUT_BevelStyle,BVS_GROUP,
+                                LAYOUT_Label, GetString(&um->localeInfo, MSG_TAB_MISC_PRESSURE_TEST),
+                
+                                LAYOUT_AddChild, um->gadgets[GID_PTEST] = (struct Gadget *)um->IIntuition->NewObject(um->SpaceClassPtr, NULL,
+                                        GA_ID, GID_PTEST,
+                                        GA_RelVerify,TRUE,
+                                    TAG_END),
+                                TAG_END),*/
+                            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                                LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
+                                LAYOUT_SpaceOuter,  TRUE,
+                                LAYOUT_BevelStyle,BVS_GROUP,
+                                LAYOUT_Label, GetString(&um->localeInfo, MSG_TAB_MISC_PRESSURE_CURVE),
+                                LAYOUT_AddChild,um->gadgets[GID_PCURVE0] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,                                
+                                            SLIDER_Level,um->Curve[0],
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE0,
+                                        TAG_END),
+                                 LAYOUT_AddChild,um->gadgets[GID_PCURVE1] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,                                
+                                            SLIDER_Level,um->Curve[1],                                
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE1,
+                                        TAG_END),                            
+                                 LAYOUT_AddChild,um->gadgets[GID_PCURVE2] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,
+                                            SLIDER_Level,um->Curve[2],                                
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE2,
+                                        TAG_END),
+                                 LAYOUT_AddChild,um->gadgets[GID_PCURVE3] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,                                
+                                            SLIDER_Level,um->Curve[3],                                
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE3,
+                                        TAG_END),
+                                 LAYOUT_AddChild,um->gadgets[GID_PCURVE4] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,                                
+                                            SLIDER_Level,um->Curve[4],                                
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE4,
+                                        TAG_END),              
+                                 LAYOUT_AddChild,um->gadgets[GID_PCURVE5] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,                                
+                                            SLIDER_Level,um->Curve[5],                                
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE5,
+                                        TAG_END),            
+                                 LAYOUT_AddChild,um->gadgets[GID_PCURVE6] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,100,
+                                            SLIDER_Invert,TRUE,                                
+                                            SLIDER_Level,um->Curve[6],                                
+                                            SLIDER_Orientation,SORIENT_VERT,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_PCURVE6,
+                                        TAG_END),                                                                                                                                              
+                                TAG_END), // layout
+                            TAG_END),  // layout
+                        LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                            LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                            LAYOUT_SpaceOuter,  TRUE,
+                            LAYOUT_BevelStyle,BVS_GROUP,
+                            LAYOUT_Label, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_SETTINGS),
+                            LAYOUT_AddChild, um->gadgets[GID_TOPX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_TOPX,
+                                    INTEGER_Number,(ULONG)um->TopX,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_TOP_X),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_TOPY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_TOPY,
+                                    INTEGER_Number,(ULONG)um->TopY,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_TOP_Y),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_RANGEX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_RANGEX,
+                                    INTEGER_Number,(ULONG)um->RangeX,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_RANGE_X),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_RANGEY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_RANGEY,
+                                    INTEGER_Number,(ULONG)um->RangeY,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_RANGE_Y),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_RANGEP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_RANGEP,
+                                    INTEGER_Number,(ULONG)um->RangeP,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_RANGE_P),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_NEWTABLET] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
+                                    GA_ID, GID_NEWTABLET,
+                                    GA_Text, GetString(&um->localeInfo, MSG_USE_NEWTABLET),
+                                    GA_Selected,(ULONG)(um->EventType & USE_NEWTABLET),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_TABLET] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
+                                    GA_ID, GID_TABLET,
+                                    GA_Text, GetString(&um->localeInfo, MSG_USE_TABLET),
+                                    GA_Selected,(ULONG)(um->EventType & USE_TABLET),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_SWITCH] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
+                                    GA_ID, GID_SWITCH,
+                                    GA_Text, GetString(&um->localeInfo, MSG_SWITCH_BUTTONS),
+                                    GA_Selected,(ULONG)(um->SwitchButtons),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_RAWMOUSE] = (struct Gadget *)um->IIntuition->NewObject(um->CheckboxClassPtr, NULL,
+                                    GA_ID, GID_RAWMOUSE,
+                                    GA_Text, GetString(&um->localeInfo, MSG_SEND_RAWMOUSE),
+                                    GA_Selected,(ULONG)(um->SendRawMouse),
+                                TAG_END),
+            
+                            TAG_END), //layout
+                        TAG_END), // layout
 
-				PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_DEBUGLEVEL] = (struct Gadget *)um->IIntuition->NewObject(um->SliderClassPtr,NULL,
+                                            SLIDER_Min,0,
+                                            SLIDER_Max,50,
+                                            SLIDER_Invert,FALSE,                                
+                                            SLIDER_Level,um->debugLevel,                                
+                                            SLIDER_Orientation,SORIENT_HORIZ,
+                                            GA_RelVerify,TRUE,
+                                            GA_ID,GID_DEBUGLEVEL,
+                                        TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_DEBUG_LEVEL),
+                        TAG_END),
+                    TAG_END), // Misc Page layout
+
+                PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
                     LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
                     LAYOUT_SpaceOuter,  TRUE,
                     LAYOUT_DeferLayout, TRUE,
-					GA_Disabled,        0 ==((um->toolCapabilities)&FLAG(BTN_TOOL_PEN)),
+                    GA_Disabled,        0 ==((um->toolCapabilities)&FLAG(BTN_TOOL_PEN)),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_TOUCH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_TOUCH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_TOUCH,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_TOUCH].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"Nib action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_NIB_ACTION),
+                        TAG_END),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_STYLUS] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_STYLUS] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_STYLUS,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_STYLUS].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"First Stylus button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_FIRST_STYLUS_BUTTON_ACTION),
+                        TAG_END),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_STYLUS2] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_STYLUS2] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_STYLUS2,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_STYLUS2].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"Second stylus button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_SECOND_STYLUS_BUTTON_ACTION),
+                        TAG_END),
                     TAG_END), // Pen Page Layout
 
-				PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
+                PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
                     LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
                     LAYOUT_SpaceOuter,  TRUE,
                     LAYOUT_DeferLayout, TRUE,
-					GA_Disabled,        0 ==((um->toolCapabilities)&FLAG(BTN_TOOL_MOUSE)),
+                    GA_Disabled,        0 ==((um->toolCapabilities)&FLAG(BTN_TOOL_MOUSE)),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_LEFT] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_LEFT] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_LEFT,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_LEFT].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"Left button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_LEFT_BUTTON_ACTION),
+                        TAG_END),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_RIGHT] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_RIGHT] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_RIGHT,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_RIGHT].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"Right button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_RIGHT_BUTTON_ACTION),
+                        TAG_END),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_MIDDLE] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_MIDDLE] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_MIDDLE,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_MIDDLE].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"Middle button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_MIDDLE_BUTTON_ACTION),
+                        TAG_END),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_4TH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_4TH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_4TH,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_SIDE].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"4th button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_4TH_BUTTON_ACTION),
+                        TAG_END),
 
-    		        LAYOUT_AddChild, um->gadgets[GID_5TH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
+                    LAYOUT_AddChild, um->gadgets[GID_5TH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_5TH,
                         GA_RelVerify,        TRUE,
                         CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
                         CHOOSER_Selected,    um->buttonAction[BTN_EXTRA].ba_action,
-                        GA_Underscore,		 0,
+                        GA_Underscore,       0,
                         TAG_END),
-    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-    		        	LABEL_Text,"5th button action",
-    					TAG_END),
+                    CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                        LABEL_Text, GetString(&um->localeInfo, MSG_5TH_BUTTON_ACTION),
+                        TAG_END),
                     TAG_END), // Mouse Page Layout
 
-				PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
+                PAGE_Add, um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
                     LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
                     LAYOUT_SpaceOuter,  TRUE,
                     LAYOUT_DeferLayout, TRUE,
 
-    		            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    		                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-    		                LAYOUT_SpaceOuter,  TRUE,
-    		                
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-    		                TAG_END),
+                        LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+            
+                            LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                            LAYOUT_SpaceOuter,  TRUE,
+                            
+                            #define AddButtonAction(i) \
+                            LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL, \
+                                GA_ID,               GID_BTN_0+i,                                                                            \
+                                GA_RelVerify,        TRUE,                                                                                   \
+                                CHOOSER_LabelArray,  buttonActionLabels,                                                                     \
+                                CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,                                                    \
+                                GA_Underscore,       0,                                                                                      \
+                                GA_Disabled,         (0 ==((um->buttonCapabilities)&FLAG(BTN_0+i))?TRUE:FALSE),                              \
+                                TAG_END),                                                                                                    \
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,                                                    \
+                                LABEL_Text, GetString(&um->localeInfo, MSG_1ST_BUTTON_ACTION+i),                                             \
+                                TAG_END)                                                                                                     \
 
-    		            LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
-    		
-    		                LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
-    		                LAYOUT_SpaceOuter,  TRUE,
-    		                
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-		    		        LAYOUT_AddChild, um->gadgets[GID_BTN_0+i] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
-		                        GA_ID,               GID_BTN_0+i,
-		                        GA_RelVerify,        TRUE,
-		                        CHOOSER_LabelArray,  buttonActionLabels,  // array of strings
-		                        CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,
-		                        GA_Underscore,		 0,
-		                        GA_Disabled,		 0 ==((um->buttonCapabilities)&FLAG(BTN_0+i++)),
-		                        TAG_END),
-		    		        CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
-		    		        	LABEL_Text,"5th button action",
-		    					TAG_END),
-		
-    		                TAG_END),
+                            AddButtonAction(0),
+                            AddButtonAction(1),
+                            AddButtonAction(2),
+                            AddButtonAction(3),
+                            AddButtonAction(4),
+                            AddButtonAction(5),
+                            AddButtonAction(6),
+                            AddButtonAction(7),
+                            AddButtonAction(8),
+                            AddButtonAction(9),
+                            AddButtonAction(10),
+                            AddButtonAction(11),
+                            TAG_END),
+
+                        LAYOUT_AddChild, um->IIntuition->NewObject(um->LayoutClassPtr, NULL,
+
+                            LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
+                            LAYOUT_SpaceOuter,  TRUE,
+
+                            AddButtonAction(12),
+                            AddButtonAction(13),
+                            AddButtonAction(14),
+                            AddButtonAction(15),
+                            AddButtonAction(16),
+                            AddButtonAction(17),
+                            AddButtonAction(18),
+                            AddButtonAction(19),
+                            AddButtonAction(20),
+                            AddButtonAction(21),
+                            AddButtonAction(22),
+                            AddButtonAction(23),
+                            TAG_END),
                     TAG_END), // Tablet Page Layout
 
-                TAG_END), // page
+                TAG_END), // page group
 
             TAG_END), // clicktab
 
@@ -811,17 +651,17 @@ Object *CreateWindow(struct usbtablet *um)
             LAYOUT_AddChild, um->gadgets[GID_SAVE] = (struct Gadget *)um->IIntuition->NewObject(um->ButtonClassPtr, NULL,
                     GA_ID,GID_SAVE,
                     GA_RelVerify,TRUE,
-                    GA_Text,"Save",
+                    GA_Text, GetString(&um->localeInfo, MSG_SAVE),
                 TAG_END),
             LAYOUT_AddChild, um->gadgets[GID_SETTOMAX] = (struct Gadget *)um->IIntuition->NewObject(um->ButtonClassPtr, NULL,
                     GA_ID,GID_SETTOMAX,
                     GA_RelVerify,TRUE,
-                    GA_Text,"Set To Maximums",
+                    GA_Text, GetString(&um->localeInfo, MSG_SET_MAXIMUMS),
                 TAG_END),
             LAYOUT_AddChild, um->gadgets[GID_USE] = (struct Gadget *)um->IIntuition->NewObject(um->ButtonClassPtr, NULL,
                     GA_ID,GID_USE,
                     GA_RelVerify,TRUE,
-                    GA_Text,"Use",
+                    GA_Text, GetString(&um->localeInfo, MSG_USE),
                 TAG_END),
             TAG_END),
         CHILD_WeightedHeight,0,
@@ -837,7 +677,7 @@ Object *CreateWindow(struct usbtablet *um)
                         WA_DragBar,TRUE,
                         WA_InnerHeight,200,
                         WA_InnerWidth,400,
-                        WA_Title,(ULONG)"Wacom Tablet Driver Control",
+                        WA_Title,(ULONG)GetString(&um->localeInfo,MSG_MAIN_TITLE),
                         WA_IDCMP,IDCMP_RAWKEY|IDCMP_MENUPICK,
                         WINDOW_Position,WPOS_CENTERSCREEN,
                         WINDOW_Layout, um->windowLayout,
@@ -931,29 +771,39 @@ void SetValues(struct usbtablet *um)
     // handle stylus buttons
     for(; nGID <= GID_STYLUS2; nGID++)
     { 
-	    if (um->IIntuition->GetAttr(CHOOSER_Selected,(Object *)um->gadgets[nGID],&attr))
-    	{
-    	    DebugLog(10,um,"Setting %ld to %ld\n", BTN_TOUCH-(nGID-GID_TOUCH), attr); 
-			um->buttonAction[BTN_TOUCH-(nGID-GID_TOUCH)].ba_action = attr;
-    	}
+        if (um->IIntuition->GetAttr(CHOOSER_Selected,(Object *)um->gadgets[nGID],&attr))
+        {
+            DebugLog(10,um,"Setting stylus %ld to %ld\n", BTN_TOUCH-(nGID-GID_TOUCH), attr);
+            um->buttonAction[BTN_TOUCH-(nGID-GID_TOUCH)].ba_action = attr;
+        }
     }
-	// handle mouse buttons
+    // handle mouse buttons
     for(nGID = GID_LEFT; nGID <= GID_5TH; nGID++)
     { 
-	    if (um->IIntuition->GetAttr(CHOOSER_Selected,(Object *)um->gadgets[nGID],&attr))
-    	{
-    	    DebugLog(10,um,"Setting %ld to %ld\n", BTN_LEFT-(nGID-GID_LEFT), attr); 
-			um->buttonAction[BTN_LEFT-(nGID-GID_LEFT)].ba_action = attr;
-    	}
+        if (um->IIntuition->GetAttr(CHOOSER_Selected,(Object *)um->gadgets[nGID],&attr))
+        {
+            DebugLog(10,um,"Setting mouse %ld to %ld\n", BTN_LEFT-(nGID-GID_LEFT), attr);
+            um->buttonAction[BTN_LEFT-(nGID-GID_LEFT)].ba_action = attr;
+        }
+    }
+    // handle tablet buttons
+    for(nGID = GID_BTN_0; nGID <= GID_BTN_FORWARD; nGID++)
+    {
+        if (um->IIntuition->GetAttr(CHOOSER_Selected,(Object *)um->gadgets[nGID],&attr))
+        {
+            DebugLog(10,um,"Setting tablet %ld to %ld\n", nGID-GID_BTN_0, attr);
+            um->buttonAction[nGID-GID_BTN_0].ba_action = attr;
+        }
     }
     // handle pressure curve settings
-	for(nGID = GID_PCURVE0; nGID <= GID_PCURVE6; nGID++)
-	{
-	    if (um->IIntuition->GetAttr(SLIDER_Level,(Object *)um->gadgets[nGID],&attr))
-    	{
-        	um->Curve[nGID-GID_PCURVE0] = attr;
-    	}
+    for(nGID = GID_PCURVE0; nGID <= GID_PCURVE6; nGID++)
+    {
+        if (um->IIntuition->GetAttr(SLIDER_Level,(Object *)um->gadgets[nGID],&attr))
+        {
+            um->Curve[nGID-GID_PCURVE0] = attr;
+        }
     }
+
     if (um->IIntuition->GetAttr(SLIDER_Level,(Object *)um->gadgets[GID_DEBUGLEVEL],&attr))
     {
         um->debugLevel = attr;
@@ -966,96 +816,100 @@ void LoadValues(struct usbtablet *um)
   ULONG nErr;
   LONG nVal;
   
-  if(pPrefs = um->IPrefsObjects->PrefsDictionary(NULL, NULL, ALPO_Alloc, 0, TAG_DONE))
+  DebugLog(0, um, "Loading prefs");
+
+  if(NULL != (pPrefs = um->IPrefsObjects->PrefsDictionary(NULL, NULL, ALPO_Alloc, 0, TAG_DONE)))
   {
-   	if(!(nErr = um->IPrefsObjects->ReadPrefs(pPrefs,
-	   	READPREFS_FileName, "ENVARC:WacomDriver.xml", 
-	   	READPREFS_ReadENVARC, TRUE, 
-	   	TAG_DONE)))
-   	{
-   	    PrefsObject *pDict = NULL;
-   	    // Range
-      if(pDict = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_DICT_RANGE))
-      {
-          um->SwitchButtons = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_SWITCH_BUTS, 0);
-          um->SendRawMouse = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RAWMOUSE, 0);
-          nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_EVENT_TYPE, -1);
-          if(-1 != nVal)
-          {
-              um->EventType = nVal;
-          }
-      }
-   	   // Events 
-      if(pDict = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_DICT_EVENTS))
-      {
-          um->TopX = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_TOP_X, 0);
-          um->TopY = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_TOP_Y, 0);
-          nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RANGE_X, -1);
-          if(-1 != nVal)
-          {
-              um->RangeX = nVal;
-          }
-          nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RANGE_Y, -1);
-          if(-1 != nVal)
-          {
-              um->RangeY = nVal;
-          }
-          nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RANGE_P, -1);
-          if(-1 != nVal)
-          {
-              um->RangeP = nVal;
-          }
-      }
-		PrefsObject *pArray = NULL;
-		// Curves
-      if(pArray = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_DICT_CURVES))
-      {
-        LONG nCount;
-        struct ALPOObjIndex iIdx;
-
-        um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetCount, &nCount, TAG_DONE);
-        for(iIdx.index = 0; iIdx.index < nCount; iIdx.index++)
+    if(!(nErr = um->IPrefsObjects->ReadPrefs(pPrefs,
+        READPREFS_FileName, "ENVARC:WacomDriver.xml",
+        READPREFS_ReadENV, TRUE,
+        READPREFS_ReadENVARC, TRUE, 
+        TAG_DONE)))
+    {
+        PrefsObject *pDict = NULL;
+        // Events
+        if(NULL != (pDict = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_DICT_EVENTS)))
         {
-          um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetObjAtIndex, &iIdx, TAG_DONE);
-          if(iIdx.obj)
-          {
-            um->IPrefsObjects->PrefsNumber(iIdx.obj, &nErr, ALPONUM_GetLong, &nVal, TAG_DONE);
-            if(!nErr)
+            um->SwitchButtons = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_SWITCH_BUTS, 0);
+            um->SendRawMouse = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RAWMOUSE, 0);
+            nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_EVENT_TYPE, -1);
+            if(-1 != nVal)
             {
-                um->Curve[iIdx.index] = nVal;
+                um->EventType = nVal;
             }
-            else     um->IDOS->Printf("??? ");
-          }
         }
-      }
-      else um->IDOS->Printf("Unable to find Curves configuration\n");
-		// ActionMapping
-      if(pArray = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_ARRAY_ACTION_MAPPING))
-      {
-        LONG nCount;
-        struct ALPOObjIndex iIdx;
-
-        um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetCount, &nCount, TAG_DONE);
-        for(iIdx.index = 0; iIdx.index < nCount; iIdx.index++)
+       // Range
+        if(NULL != (pDict = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_DICT_RANGE)))
         {
-          um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetObjAtIndex, &iIdx, TAG_DONE);
-          if(iIdx.obj)
+            um->TopX = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_TOP_X, 0);
+            um->TopY = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_TOP_Y, 0);
+            nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RANGE_X, -1);
+            if(-1 != nVal)
+            {
+                um->RangeX = nVal;
+            }
+            nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RANGE_Y, -1);
+            if(-1 != nVal)
+            {
+                um->RangeY = nVal;
+            }
+            nVal = um->IPrefsObjects->DictGetIntegerForKey(pDict, PREFS_KEY_RANGE_P, -1);
+            if(-1 != nVal)
+            {
+                um->RangeP = nVal;
+            }
+        }
+        PrefsObject *pArray = NULL;
+        // Curves
+        if(NULL != (pArray = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_DICT_CURVES)))
+        {
+          LONG nCount;
+          struct ALPOObjIndex iIdx;
+
+          um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetCount, &nCount, TAG_DONE);
+          for(iIdx.index = 0; iIdx.index < nCount; iIdx.index++)
           {
-              nVal = um->IPrefsObjects->DictGetIntegerForKey(iIdx.obj, PREFS_KEY_ACTION, -1);
-              if( -1 != nVal )
+            um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetObjAtIndex, &iIdx, TAG_DONE);
+            if(iIdx.obj)
+            {
+              um->IPrefsObjects->PrefsNumber(iIdx.obj, &nErr, ALPONUM_GetLong, &nVal, TAG_DONE);
+              if(!nErr)
               {
-                  um->buttonAction[iIdx.index].ba_action = nVal;
+                  um->Curve[iIdx.index] = nVal;
               }
-              um->buttonAction[iIdx.index].ba_parameter = um->IPrefsObjects->DictGetStringForKey(iIdx.obj, PREFS_KEY_PARAMETER, NULL);
+              else     um->IDOS->Printf("??? ");
+            }
           }
         }
-      }
-      else um->IDOS->Printf("Unable to find Action mapping configuration\n");
-    }
-    else um->IDOS->Printf("Unable to read conf file (err $%lx)\n", nErr);
+        else DebugLog(0, um, "Unable to find Curves configuration");
+        // ActionMapping
+        if(NULL != (pArray = um->IPrefsObjects->DictGetObjectForKey(pPrefs, PREFS_ARRAY_ACTION_MAPPING)))
+        {
+          LONG nCount;
+          struct ALPOObjIndex iIdx;
 
-    um->IPrefsObjects->PrefsDictionary(pPrefs, NULL, ALPO_Release, 0, TAG_DONE);
-  }
+          um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetCount, &nCount, TAG_DONE);
+          for(iIdx.index = 0; iIdx.index < nCount; iIdx.index++)
+          {
+            um->IPrefsObjects->PrefsArray(pArray, NULL, ALPOARR_GetObjAtIndex, &iIdx, TAG_DONE);
+            if(iIdx.obj)
+            {
+                nVal = um->IPrefsObjects->DictGetIntegerForKey(iIdx.obj, PREFS_KEY_ACTION, -1);
+                if( -1 != nVal )
+                {
+                    um->buttonAction[iIdx.index].ba_action = nVal;
+                    DebugLog(40, um, "action for button %d=%d", iIdx.index, nVal);
+                }
+                um->buttonAction[iIdx.index].ba_parameter = um->IPrefsObjects->DictGetStringForKey(iIdx.obj, PREFS_KEY_PARAMETER, NULL);
+            }
+          }
+        }
+        else DebugLog(0, um, "Unable to find Action mapping configuration");
+      }
+      else DebugLog(0, um, "Unable to read conf file (err $%lx)", nErr);
+
+      um->IPrefsObjects->PrefsDictionary(pPrefs, NULL, ALPO_Release, 0, TAG_DONE);
+    }
 }
 
 void SaveValues(struct usbtablet *um)
@@ -1138,33 +992,34 @@ void SaveValues(struct usbtablet *um)
     um->IPrefsObjects->DictSetObjectForKey(pPrefsDict, pObj, PREFS_DICT_CURVES);
     // -- Action Mapping
     pObj = um->IPrefsObjects->PrefsArray(NULL, NULL, ALPO_Alloc, 0, TAG_DONE);
-	
-	int nIndex = 0;
-	for(nIndex = 0; nIndex < 32; nIndex++)
-	{
-	   PrefsObject *pSubDict = um->IPrefsObjects->PrefsDictionary(NULL, NULL, ALPO_Alloc, 0, TAG_DONE);
-	   
-	   um->IPrefsObjects->DictSetObjectForKey(pSubDict, 
-	   			um->IPrefsObjects->PrefsNumber(NULL, NULL,
+    
+    int nIndex = 0;
+    for(nIndex = 0; nIndex < 32; nIndex++)
+    {
+       PrefsObject *pSubDict = um->IPrefsObjects->PrefsDictionary(NULL, NULL, ALPO_Alloc, 0, TAG_DONE);
+       
+       um->IPrefsObjects->DictSetObjectForKey(pSubDict, 
+                um->IPrefsObjects->PrefsNumber(NULL, NULL,
                                            ALPONUM_AllocSetLong, um->buttonAction[nIndex].ba_action,
                                            TAG_DONE),
-	   			PREFS_KEY_ACTION);
-	   um->IPrefsObjects->DictSetObjectForKey(pSubDict, 
-	   			um->IPrefsObjects->PrefsString(NULL, NULL,
+                PREFS_KEY_ACTION);
+       um->IPrefsObjects->DictSetObjectForKey(pSubDict, 
+                um->IPrefsObjects->PrefsString(NULL, NULL,
                                            ALPOSTR_AllocSetString, um->buttonAction[nIndex].ba_parameter,
                                            TAG_DONE),
-	   			PREFS_KEY_PARAMETER);
-	   
-	   um->IPrefsObjects->PrefsArray(pObj, NULL, ALPOARR_AddObj, pSubDict, TAG_DONE);
-	}
+                PREFS_KEY_PARAMETER);
+       
+       um->IPrefsObjects->PrefsArray(pObj, NULL, ALPOARR_AddObj, pSubDict, TAG_DONE);
+    }
     um->IPrefsObjects->DictSetObjectForKey(pPrefsDict, pObj, PREFS_ARRAY_ACTION_MAPPING);
 
-	um->IPrefsObjects->WritePrefs( pPrefsDict, 
+    um->IPrefsObjects->WritePrefs( pPrefsDict, 
        WRITEPREFS_FileName, "ENVARC:WacomDriver.xml",
+       WRITEPREFS_WriteENV, TRUE,
        WRITEPREFS_WriteENVARC, TRUE,
        TAG_DONE);
-	
-	um->IPrefsObjects->PrefsDictionary( pPrefsDict, NULL, ALPO_Release, 0, TAG_DONE );
+    
+    um->IPrefsObjects->PrefsDictionary( pPrefsDict, NULL, ALPO_Release, 0, TAG_DONE );
 }
 
 
