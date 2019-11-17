@@ -1,3 +1,4 @@
+
 Version 1.1
 
 This is a driver for Wacom Graphics Tablets. These tablets typically work with
@@ -65,6 +66,9 @@ Disclaimers
 Configuration of action 'showkey' is currently considered 'beta', it may freeze
 the machine if you try it.
 
+Multitouch tablets cannot be supported right now because AmigaOS does not have
+support for it. Once AmigaOS gets proper support for such feature, this driver
+could be updated to support such tablets.
 
 Supported tablet informations
 -----------------------------
@@ -94,7 +98,7 @@ Possible values for this tag are :
     2 BTN_TOOL_BRUSH: a special stylus (or nib) representing a brush
     3 BTN_TOOL_PENCIL: a special stylus (or nib) representing pencil
     4 BTN_TOOL_AIRBRUSH: a special stylus (or nib) reprensting airbrush
-    5 BTN_TOOL_FINGER: a single finger touch on a touchable part of the tablet 
+    5 BTN_TOOL_FINGER: a single finger touch on a touchable part of the tablet
     6 BTN_TOOL_MOUSE: a compatible mouse
     7 BTN_TOOL_LENS: use the lens
     8 BTN_TOOL_DOUBLETAP: a double finger touch on touchable parts of the tablet
@@ -165,6 +169,11 @@ Wacom ISDv4 90, 93, 9A, 9F, E2, E3
 History
 -------
 
+ 1.2    2019-xx-xx  - Added: support for IntuosHT2 range of tablets (i.e.
+                             Intuos S 2, Intuos PT S 2, Intuos P M 2 and
+                             Intuos PT M 2)
+                    - Added: explicit log for unsupported multitouch
+                             tablets and mentionned it in the readme
  1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
                                (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
                                 Bamboo pen & touch, graphire)
