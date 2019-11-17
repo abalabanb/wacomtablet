@@ -1923,13 +1923,35 @@ VOID WacomHandler( struct usbtablet *um )
                     WacomHandler_intuos(um);
                     break;
             
-                /* Note ABA: 24HDT is not supported because
-                 * of its MT nature and MT isn't supported
-                 * yet by AmigaOS 4
+                /* Note ABA: below tablets are not supported
+                 * because of their MT nature and MT isn't
+                 * supported yet by AmigaOS 4
                  */
-                //case WACOM_24HDT:
-                //    WacomHandler_24hdt(um);
-                //    break;
+                case WACOM_MSPRO:
+                case INTUOSP2:
+                case INTUOSP2S:
+                case CINTIQ_16:
+                    if (req->io_Actual == WACOM_PKGLEN_INTUOSP2T/* &&
+                        um->UsbData[0] == WACOM_REPORT_VENDOR_DEF_TOUCH*/)
+                    {
+                        //sync = wacom_multitouch_generic(um);
+                        DebugLog(0, um, "WacomHandler: AmigaOS does not support multitouch yet, hence tablet type %ld, '%s' is not supported\n", um->features->type, um->features->name);
+                    }
+                    else
+                    {
+                        //sync = wacom_mspro_irq(um);
+                        DebugLog(0, um, "WacomHandler: unsupported tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                    }
+                    break;
+
+                case WACOM_24HDT:
+                case WACOM_27QHDT:
+                case DTH1152T:
+                case DTH2452T:
+                case WACOM_MSPROT:
+                    //sync = wacom_multitouch_generic(um);
+                    DebugLog(0, um, "WacomHandler: AmigaOS does not support multitouch yet, hence tablet type %ld, '%s' is not supported\n", um->features->type, um->features->name);
+                    break;
 
                 case INTUOS5S:
                 case INTUOS5:
@@ -1939,13 +1961,25 @@ VOID WacomHandler( struct usbtablet *um )
                 case INTUOSPL:
                     if (WACOM_PKGLEN_BBTOUCH3 == req->io_Actual)
                         WacomHandler_bpt3_touch(um);
+                    else if (um->UsbData[0] == WACOM_REPORT_USB)
+                    {
+                        //sync = wacom_status_irq(um, len);
+                        DebugLog(0, um, "WacomHandler: unsupported status tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                    }
                     else
                         WacomHandler_intuos(um);
                     break;
 
                 case BAMBOO_PT:
                 case INTUOSHT:
-                    WacomHandler_bpt(um, req->io_Actual);
+                case INTUOSHT2:
+                    if (um->UsbData[0] == WACOM_REPORT_USB)
+                    {
+                        //sync = wacom_status_irq(wacom_wac, len);
+                        DebugLog(0, um, "WacomHandler: unsupported status tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                    }
+                    else
+                        WacomHandler_bpt(um, req->io_Actual);
                     break;
 
                 default:

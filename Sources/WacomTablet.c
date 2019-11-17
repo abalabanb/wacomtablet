@@ -34,6 +34,11 @@
  * based in turn on rMouse.usbfd by Rene W. Olsen
  * based in turn on the bootmouse driver by Thomas Graff
  *
+ *   1.2    2019-xx-xx  - Added: support for IntuosHT2 range of tablets (i.e.
+ *                               Intuos S 2, Intuos PT S 2, Intuos P M 2 and
+ *                               Intuos PT M 2)
+ *                      - Added: explicit log for unsupported multitouch
+ *                               tablets and mentionned it in the readme
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
