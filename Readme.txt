@@ -168,6 +168,7 @@ History
  1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
                                (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
                                 Bamboo pen & touch, graphire)
+
  Intern 2015-02-xx  - Added: support for Intuos Pro tablets
                     - Added: support for Bamboo One tablets
                     - Added: support for Cintiq 13HD tablets
@@ -179,6 +180,7 @@ History
                              failure
                     - Fixed: used prefsobjects interface version 1
                     - Added: Initial action handler
+
  Intern 2013-03-xx  - Added: Icons by Davebraco
                     - Fixed: Some compilation warnings
                     - Fixed: Incorrect button count displayed in prefs GUI
@@ -189,15 +191,6 @@ History
                              unterminated label list
                     - Fixed: Replaced deprecated functions by new ones
                     - Added: Proper version handling mechanism
- v1.1 - 2019-11-03  - Added: Icons by David 'Davebraco' Braconnier
-                    - Fixed: Some compilation warnings
-                    - Fixed: Incorrect button count displayed in prefs GUI
-                    - Fixed: Warning about bad application.library version
-                             tag used when saving prefs
-                    - Updated: source code updated to input-wacom v0.16.0
-                    - Fixed: Potential crash in prefs program due to
-                             unterminated label list
-                    - Fixed: Replaced deprecated functions by new ones
 
  v1.0 - 2012-08-01  - Added: tablet buttons configurability
  (Public release)   - Added: debuglevel env variable load
