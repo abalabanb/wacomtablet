@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
+ * Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
  * Copyright 2011 Andy Broad <andy@broad.ology.org.uk>
  * Copyright 2005 Rene W. Olsen <ac@rebels.com>
  * All rights reserved.
@@ -34,11 +34,15 @@
  * based in turn on rMouse.usbfd by Rene W. Olsen
  * based in turn on the bootmouse driver by Thomas Graff
  *
- *   1.2    2019-xx-xx  - Added: support for IntuosHT2 range of tablets (i.e.
+ *   1.2    202x-xx-xx  - Added: support for IntuosHT2 range of tablets (i.e.
  *                               Intuos S 2, Intuos PT S 2, Intuos P M 2 and
  *                               Intuos PT M 2)
  *                      - Added: explicit log for unsupported multitouch
  *                               tablets and mentionned it in the readme
+ *                      - Updated: makefile updated to conform new repo layout
+ *                      - Fixed: crash when trying to initialize unsupported
+ *                               params (yet), many models were affected, mainly
+ *                               Intuos and Cintiq (reported by Remo Constantin)
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1758,7 +1762,7 @@ void SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, i
     switch(paramName)
     {
         default:
-            DebugLog(0, um, "WacomHandler: unsupported value for paramName '%s'", paramName);
+            DebugLog(0, um, "WacomHandler: unsupported value for paramName '%08x'", paramName);
             break;
         case ABS_X:
             um->minX = min;
