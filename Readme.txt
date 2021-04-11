@@ -174,6 +174,11 @@ History
                              Intuos PT M 2)
                     - Added: explicit log for unsupported multitouch
                              tablets and mentionned it in the readme
+                    - Updated: makefile updated to conform new repo layout
+                    - Fixed: crash when trying to initialize unsupported
+                             params (yet), many models were affected, mainly
+                             Intuos and Cintiq (reported by Remo Constantin)
+
  1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
                                (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
                                 Bamboo pen & touch, graphire)

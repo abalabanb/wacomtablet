@@ -31,7 +31,7 @@ LIBS =
 
 .PHONY: all all-before all-after clean clean-custom revision
 
-all: all-before $(BIN) WacomPrefs all-after
+all: all-before ../$(BIN) ../WacomPrefs all-after
 
 all-before:
 #	You can add rules here to execute before the project is built
@@ -42,13 +42,13 @@ all-after:
 clean: clean-custom
 	rm $(OBJS) $(OBJS_REV) $(OBJS_PREFS) $(OBJS_PREFS_REV) $(BIN)
 
-$(BIN): WacomTablet_locale.h $(OBJS) $(OBJS_REV)
+../$(BIN): WacomTablet_locale.h $(OBJS) $(OBJS_REV)
 #	Debug builds require the -g or -gstabs option in CFLAGS
 #	You may also need to move the LDFLAGS variable depending on the contents
-	$(CC) -o $(BIN).debug $(OBJS) $(OBJS_REV) $(LDFLAGS) $(LIBS)
-	strip $(BIN).debug -o $(BIN)
+	$(CC) -o $@.debug $(OBJS) $(OBJS_REV) $(LDFLAGS) $(LIBS)
+	strip $@.debug -o $@
 
-WacomPrefs: $(OBJS_PREFS) $(OBJS_PREFS_REV)
+../WacomPrefs: $(OBJS_PREFS) $(OBJS_PREFS_REV)
 	$(CC) -o $@.debug $^ -lauto
 	strip $@.debug -o $@
 
