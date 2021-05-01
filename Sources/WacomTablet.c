@@ -1521,7 +1521,7 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             }
             um->IENT_Tags[0].ti_Tag = TABLETA_Pressure;
             // normalize to fill signed long integer range
-            um->IENT_Tags[0].ti_Data = ConvertPressure(um, um->Pressure) * (0xffffffff / um->RangeP ) - 0x80000000;
+            um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->Pressure) * 0xffffffff / um->RangeP ) - 0x80000000;
             // identify tool
             um->IENT_Tags[1].ti_Tag = TABLETA_Tool;
             um->IENT_Tags[1].ti_Data = um->tool[toolIdx];
@@ -1536,12 +1536,15 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             um->IENT_Tags[6].ti_Tag = TABLETA_AngleZ;
             um->IENT_Tags[6].ti_Data = um->tiltZ;
 
-            DebugLog(20, um, "NewTablet: X %ld, Y %ld, Pressure %ld, Tool %ld Proximity %ld\n", 
+            DebugLog(20, um, "NewTablet: X %ld, Y %ld, Pressure %ld, Tool %ld Proximity %ld, AngleX %ld, AngleY %ld, AngleZ %ld\n",
                             um->IENT.ient_TabletX, 
                             um->IENT.ient_TabletY, 
                             um->IENT_Tags[0].ti_Data,
                             um->IENT_Tags[1].ti_Data,
-                            um->IENT_Tags[2].ti_Data
+                            um->IENT_Tags[2].ti_Data,
+                            um->IENT_Tags[4].ti_Data,
+                            um->IENT_Tags[5].ti_Data,
+                            um->IENT_Tags[6].ti_Data
                             );
 
             um->IENT_Tags[7].ti_Tag = TAG_DONE;
