@@ -8,9 +8,9 @@
 **
 ** File: Tablet handler functions
 **
-** Date: 02-11-2019 23:13:24
+** Date: 02-05-2021 01:15:42
 **
-** Copyright 2012-2019 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
+** Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
 **
 ** This program is free software; you can redistribute it and/or modify it
 ** under the terms of the GNU General Public License  as published by the
@@ -1785,20 +1785,36 @@ static void WacomHandler_intuos(struct usbtablet *wacom)
     /* process pad events */
     result = wacom_intuos_pad(wacom);
     if (result)
+    {
+        SendTabletEvent(0, wacom, buttons);
+        HandleExecuteActions(wacom, wacom->buttonAction, buttons);
+
+        DebugLog(20, wacom, "WacomHandler_intuos: return after wacom_intuos_pad\n");
         return /*result*/;
+    }
 
     /* process in/out prox events */
     result = wacom_intuos_inout(wacom);
     if (result)
+    {
+        SendTabletEvent(0, wacom, buttons);
+        HandleExecuteActions(wacom, wacom->buttonAction, buttons);
+
+        DebugLog(20, wacom, "WacomHandler_intuos: return after wacom_intuos_inout\n");
         return /*result - 1*/;
+    }
 
     /* process general packets */
     result = wacom_intuos_general(wacom, &buttons, &toolIdx);
     if (result)
-        return /*result - 1*/;
+    {
+        SendTabletEvent(0, wacom, buttons);
+        SendMouseEvent(wacom, buttons);
+        HandleExecuteActions(wacom, wacom->buttonAction, buttons);
 
-    SendTabletEvent(0, wacom, buttons);
-    HandleExecuteActions(wacom, wacom->buttonAction, buttons);
+        DebugLog(20, wacom, "WacomHandler_intuos: return after wacom_intuos_general\n");
+        return /*result - 1*/;
+    }
 
     //return;
 }
