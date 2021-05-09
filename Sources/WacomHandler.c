@@ -1414,7 +1414,7 @@ static int wacom_intuos_pad(struct usbtablet *wacom)
     //input_report_abs(input, ABS_RY, strip2);
     if( strip1 || strip2 ) {
         DebugLog(20, wacom, "wacom_intuos_pad: strip (%ld, %ld)\n", strip2, strip1);
-        SendWheelEvent(wacom, strip2, strip2, FALSE);
+        SendWheelEvent(wacom, strip2, strip1, FALSE);
     }
     else {
         const int32 vWheel = (ring1 & 0x80) ? (ring1 & 0x7f) : 0;
