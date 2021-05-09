@@ -1198,7 +1198,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
             vWheel = vertWheelData - vWheel;
             if(abs(vWheel) > 20)
             {
-                vWheel = 20;
+                vWheel = (vWheel > 0) ? 20 : -20;
             }
         }
         um->wheel[1] = vertWheelData;
@@ -1211,7 +1211,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
             hWheel = horizWheelData - hWheel;
             if(abs(hWheel) > 20)
             {
-                hWheel = 20;
+                hWheel = (hWheel > 0)? 20 : -20;
             }
         }
         um->wheel[0] = horizWheelData;
