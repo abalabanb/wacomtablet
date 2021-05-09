@@ -43,6 +43,9 @@
  *                      - Fixed: crash when trying to initialize unsupported
  *                               params (yet), many models were affected, mainly
  *                               Intuos and Cintiq (reported by Remo Constantin)
+ *                      - Fixed: BTN_0 in functions wacom_report_numbered_buttons
+ *                               and wacom_numbered_button_to_key was ineffective
+ *                      - Fixed: wheel events for Intuos3 was not working
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1195,7 +1198,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
             vWheel = vertWheelData - vWheel;
             if(abs(vWheel) > 20)
             {
-                vWheel = 0;
+                vWheel = 20;
             }
         }
         um->wheel[1] = vertWheelData;
@@ -1208,7 +1211,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
             hWheel = horizWheelData - hWheel;
             if(abs(hWheel) > 20)
             {
-                hWheel = 0;
+                hWheel = 20;
             }
         }
         um->wheel[0] = horizWheelData;

@@ -8,7 +8,7 @@
 **
 ** File: Tablet handler functions
 **
-** Date: 02-05-2021 01:15:42
+** Date: 09-05-2021 23:38:45
 **
 ** Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
 **
@@ -1412,10 +1412,16 @@ static int wacom_intuos_pad(struct usbtablet *wacom)
 
     //input_report_abs(input, ABS_RX, strip1);
     //input_report_abs(input, ABS_RY, strip2);
-
-    const int32 vWheel = (ring1 & 0x80) ? (ring1 & 0x7f) : 0;
-    const int32 hWheel = (ring2 & 0x80) ? (ring2 & 0x7f) : 0;
-    SendWheelEvent(wacom, hWheel, vWheel, FALSE);
+    if( strip1 || strip2 ) {
+        DebugLog(20, wacom, "wacom_intuos_pad: strip (%ld, %ld)\n", strip2, strip1);
+        SendWheelEvent(wacom, strip2, strip2, FALSE);
+    }
+    else {
+        const int32 vWheel = (ring1 & 0x80) ? (ring1 & 0x7f) : 0;
+        const int32 hWheel = (ring2 & 0x80) ? (ring2 & 0x7f) : 0;
+        DebugLog(20, wacom, "wacom_intuos_pad: wheel values (%ld, %ld)\n", hWheel, vWheel);
+        SendWheelEvent(wacom, hWheel, vWheel, FALSE);
+    }
 
     wacom->proximity[1] = prox ? TRUE : FALSE;
     wacom->tool[1] = PAD_DEVICE_ID;
@@ -1829,7 +1835,7 @@ static int wacom_numbered_button_to_key(int n)
     else if (n < 18)
         return BTN_BASE + (n-16);
     else
-        return 0;
+        return -1; // 0; // ABA: BTN_0 has value 0, changed error to -1 to differentiate
 }
 
 static void wacom_report_numbered_buttons(/*struct input_dev *input_dev,*/
@@ -1840,7 +1846,7 @@ static void wacom_report_numbered_buttons(/*struct input_dev *input_dev,*/
     for (i = 0; i < button_count; i++) {
         int key = wacom_numbered_button_to_key(i);
 
-        if (key)
+        if (key >= 0) /* (key) */ // ABA: changed due to key emulation constraints, 0 is a possible value
         {
             SETBITS(*pButtons, key, mask & (1 << i));
         }
