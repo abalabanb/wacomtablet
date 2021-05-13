@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
+ * Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
  * Copyright 2011 Andy Broad <andy@broad.ology.org.uk>
  * Copyright 2005 Rene W. Olsen <ac@rebels.com>
  * All rights reserved.
@@ -557,9 +557,6 @@ struct usbtablet {
     uint64                  Buttons;        // Latest tablet buttons states as reported by last tablet message
     uint64                  PrevButtons;    // Previous buttons states (usefull for execute actionshandling)n
     uint16                  Qual;
-
-    uint8                   PrevKbdCode[2]; // Previous code/qualifier for InputEvent generation
-    uint8                   PrevKbdQual[2];
 
 
     struct Library *        CxBase;
