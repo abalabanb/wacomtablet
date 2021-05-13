@@ -631,6 +631,8 @@ struct usbtablet {
     int32                   minZ, maxZ, fuzzZ;
     int32                   minWheel, maxWheel, fuzzWheel;
     int32                   minThrottle, maxThrottle, fuzzThrottle;
+    int32                   minTiltX, maxTiltX, fuzzTiltX;
+    int32                   minTiltY, maxTiltY, fuzzTiltY;
 
     struct ButtonAction     buttonAction[64];
 

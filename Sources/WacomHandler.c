@@ -8,7 +8,7 @@
 **
 ** File: Tablet handler functions
 **
-** Date: 09-05-2021 23:38:45
+** Date: 13-05-2021 20:20:12
 **
 ** Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
 **
@@ -1588,8 +1588,8 @@ static int wacom_intuos_inout(struct usbtablet *um)
         um->proximity[idx] = FALSE;
         //input_event(input, EV_MSC, MSC_SERIAL, wacom->serial[idx]);
         um->id[idx] = 0;
-        SendMouseEvent(um, 0);
-        SendTabletEvent(idx, um, 0);
+        //SendMouseEvent(um, 0);
+        //SendTabletEvent(idx, um, 0);
         
         return 2;
     }

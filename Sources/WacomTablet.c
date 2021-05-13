@@ -46,6 +46,8 @@
  *                      - Fixed: BTN_0 in functions wacom_report_numbered_buttons
  *                               and wacom_numbered_button_to_key was ineffective
  *                      - Fixed: wheel events for Intuos3 was not working
+ *                      - Fixed: add correct support for tilt (value ranges, TiltX
+ *                               and TiltY were exchanged)
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1533,9 +1535,9 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             um->IENT_Tags[3].ti_Tag = TABLETA_TabletZ;
             um->IENT_Tags[3].ti_Data = um->Z;
             um->IENT_Tags[4].ti_Tag = TABLETA_AngleX;
-            um->IENT_Tags[4].ti_Data = um->tiltX;
+            um->IENT_Tags[4].ti_Data = -(um->tiltY - ((um->maxTiltY - um->minTiltY) / 2)) * (0x7fffffff / 360);
             um->IENT_Tags[5].ti_Tag = TABLETA_AngleY;
-            um->IENT_Tags[5].ti_Data = um->tiltY;
+            um->IENT_Tags[5].ti_Data = (um->tiltX - ((um->maxTiltX - um->minTiltX) / 2)) * (0x7fffffff / 360);
             um->IENT_Tags[6].ti_Tag = TABLETA_AngleZ;
             um->IENT_Tags[6].ti_Data = um->tiltZ;
 
@@ -1785,7 +1787,7 @@ void SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, i
         case ABS_Z:
         case ABS_DISTANCE:
             // NOTE: https://www.kernel.org/doc/Documentation/input/event-codes.txt,
-            // for now ABS_Zand ABS_DISTANCE are considered as synonyms
+            // for now ABS_Z and ABS_DISTANCE are considered as synonyms
             um->minZ = min;
             um->maxZ = max;
             um->fuzzZ = fuzz;
@@ -1796,6 +1798,18 @@ void SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, i
             um->maxWheel = max;
             um->fuzzWheel = fuzz;
             //um->flatWheel = flat;
+            break;
+        case ABS_TILT_X:
+            um->minTiltX = min;
+            um->maxTiltX = max;
+            um->fuzzTiltX = fuzz;
+            //um->flatTiltX = flat;
+            break;
+        case ABS_TILT_Y:
+            um->minTiltY = min;
+            um->maxTiltY = max;
+            um->fuzzTiltY = fuzz;
+            //um->flatTiltY = flat;
             break;
     }
 }
