@@ -23,6 +23,14 @@ MSG_TAB_MISC_CURRENT_Y (//)
 Current Y
 ; Current Y label
 ;
+MSG_TAB_MISC_CURRENT_TILT_X (//)
+Current Tilt X
+; Current Tilt X label
+;
+MSG_TAB_MISC_CURRENT_TILT_Y (//)
+Current Tilt Y
+; Current Tilt Y label
+;
 MSG_TAB_MISC_CURRENT_P (//)
 Current P
 ; Current P label

@@ -440,6 +440,8 @@ extern const struct wacom_device wacom_devices[];
 enum {
     GID_CURRENTX,
     GID_CURRENTY,
+    GID_CURRENTTILTX,
+    GID_CURRENTTILTY,
     GID_CURRENTP,
     GID_MAXX,
     GID_MAXY,

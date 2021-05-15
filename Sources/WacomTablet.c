@@ -48,6 +48,7 @@
  *                      - Fixed: wheel events for Intuos3 was not working
  *                      - Fixed: add correct support for tilt (value ranges, TiltX
  *                               and TiltY were exchanged)
+ *                      - Added: tilt display in commodity window
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1473,6 +1474,14 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTY],um->win,NULL,
                                                     INTEGER_Number,um->Y,
+                                                    TAG_DONE);
+
+            um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTTILTX],um->win,NULL,
+                                                    INTEGER_Number,um->tiltX,
+                                                    TAG_DONE);
+
+            um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTTILTY],um->win,NULL,
+                                                    INTEGER_Number,um->tiltY,
                                                     TAG_DONE);
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTP],um->win,NULL,

@@ -1,7 +1,7 @@
 /*
  * Comodities support GUI
  *
- * Copyright 2012-2018 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
+ * Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
  * Copyright 2011 Andy Broad <andy@broad.ology.org.uk>
  * All rights reserved.
  *
@@ -278,6 +278,22 @@ Object *CreateWindow(struct usbtablet *um)
                                 TAG_END),
                             CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
                                 LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_Y),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_CURRENTTILTX] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_CURRENTTILTX,
+                                    INTEGER_Arrows,FALSE,
+                                    GA_ReadOnly,TRUE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_TILT_X),
+                                TAG_END),
+                            LAYOUT_AddChild, um->gadgets[GID_CURRENTTILTY] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
+                                    GA_ID, GID_CURRENTTILTY,
+                                    GA_ReadOnly,TRUE,
+                                    INTEGER_Arrows,FALSE,
+                                TAG_END),
+                            CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
+                                LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_CURRENT_TILT_Y),
                                 TAG_END),
                             LAYOUT_AddChild, um->gadgets[GID_CURRENTP] = (struct Gadget *)um->IIntuition->NewObject(um->IntegerClassPtr, NULL,
                                     GA_ID, GID_CURRENTP,
