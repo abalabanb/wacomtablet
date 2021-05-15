@@ -55,7 +55,7 @@ clean: clean-custom
 WacomTablet.usbfd_rev.h : $(OBJS)
 	revbump WacomTablet.usbfd sub
 
-WacomPrefs_rev.h : $(OBJS)
+WacomPrefs_rev.h : $(OBJS_PREFS)
 	revbump WacomPrefs sub
 
 revision:
