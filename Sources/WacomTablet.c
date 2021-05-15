@@ -49,6 +49,7 @@
  *                      - Fixed: add correct support for tilt (value ranges, TiltX
  *                               and TiltY were exchanged)
  *                      - Added: tilt display in commodity window
+ *                      - Updated: reworked layout of current/max values
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)

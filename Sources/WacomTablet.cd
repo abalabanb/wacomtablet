@@ -1,5 +1,5 @@
 #language english
-#version 1
+#version 2
 #basename WacomTablet
 ;
 ; Generic messages
@@ -15,37 +15,37 @@ MSG_TAB_MISC_DETECTED (//)
 Detected tablet
 ; Detected tablet label
 ;
-MSG_TAB_MISC_CURRENT_X (//)
-Current X
-; Current X label
+MSG_TAB_MISC_REPORT_VALUES (//)
+Report values
+; Report values group label
 ;
-MSG_TAB_MISC_CURRENT_Y (//)
-Current Y
-; Current Y label
+MSG_TAB_MISC_CURRENT (//)
+Current
+; Current value column label
 ;
-MSG_TAB_MISC_CURRENT_TILT_X (//)
-Current Tilt X
-; Current Tilt X label
+MSG_TAB_MISC_MAX (//)
+Max
+; Max value column label
 ;
-MSG_TAB_MISC_CURRENT_TILT_Y (//)
-Current Tilt Y
-; Current Tilt Y label
+MSG_TAB_MISC_X (//)
+X
+; X row label
 ;
-MSG_TAB_MISC_CURRENT_P (//)
-Current P
-; Current P label
+MSG_TAB_MISC_Y (//)
+Y
+; Y row label
 ;
-MSG_TAB_MISC_MAX_X (//)
-Max X
-; Max X label
+MSG_TAB_MISC_TILT_X (//)
+Tilt X
+; Tilt X row label
 ;
-MSG_TAB_MISC_MAX_Y (//)
-Max Y
-; Max Y label
+MSG_TAB_MISC_TILT_Y (//)
+Tilt Y
+; Tilt Y row label
 ;
-MSG_TAB_MISC_MAX_P (//)
-Max P
-; Max P label
+MSG_TAB_MISC_P (//)
+Pressure
+; Pressure row label
 ;
 MSG_TAB_MISC_PRESSURE_TEST (//)
 Pressure Test
@@ -53,11 +53,11 @@ Pressure Test
 ;
 MSG_TAB_MISC_PRESSURE_CURVE (//)
 Pressure Curve
-; Pressure curve label
+; Pressure curve group label
 ;
 MSG_TAB_MISC_CURRENT_SETTINGS (//)
 Current Settings
-; Current settings label
+; Current settings group label
 ;
 MSG_TAB_MISC_TOP_X (//)
 Top X
