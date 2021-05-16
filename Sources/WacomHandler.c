@@ -8,7 +8,7 @@
 **
 ** File: Tablet handler functions
 **
-** Date: 13-05-2021 20:20:12
+** Date: 16-05-2021 19:31:01
 **
 ** Copyright 2012-2021 Alexandre Balaban <amiga(-@-)balaban(-.-)fr>
 **
@@ -630,6 +630,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
 static void WacomHandler_penpartner(struct usbtablet *um)
 {
     unsigned char *data = um->UsbData;
+    struct WacomState *state = &um->currentState;
     uint64 buttons = 0;
 
     switch (data[0]) {
@@ -637,15 +638,15 @@ static void WacomHandler_penpartner(struct usbtablet *um)
         if (data[5] & 0x80) {
             um->tool[0] = (data[5] & 0x20) ? BTN_TOOL_RUBBER : BTN_TOOL_PEN;
             um->id[0] = (data[5] & 0x20) ? ERASER_DEVICE_ID : STYLUS_DEVICE_ID;
-            um->proximity[0] = 1;
-            um->X = LE_INT16(*((int16 *)&data[1]));
-            um->Y = LE_INT16(*((int16 *)&data[3]));
-            um->Pressure = (signed char)data[6] + 127;
+            state->proximity[0] = 1;
+            state->X = LE_INT16(*((int16 *)&data[1]));
+            state->Y = LE_INT16(*((int16 *)&data[3]));
+            state->Pressure = (signed char)data[6] + 127;
             SETBITS(buttons, BTN_TOUCH, ((signed char)data[6] > -127));
             SETBITS(buttons, BTN_STYLUS, (data[5] & 0x40));
         } else {
-            um->proximity[0] = 0;
-            um->Pressure = -1;
+            state->proximity[0] = 0;
+            state->Pressure = -1;
             SETBITS(buttons, BTN_TOUCH, 0);
         }
         break;
@@ -653,10 +654,10 @@ static void WacomHandler_penpartner(struct usbtablet *um)
     case 2:
         um->tool[0] = BTN_TOOL_PEN;
         um->id[0] = STYLUS_DEVICE_ID;
-        um->proximity[0] = 1;
-        um->X = LE_INT16(*((int16 *)&data[1]));
-        um->Y = LE_INT16(*((int16 *)&data[3]));
-        um->Pressure = (signed char)data[6] + 127;
+        state->proximity[0] = 1;
+        state->X = LE_INT16(*((int16 *)&data[1]));
+        state->Y = LE_INT16(*((int16 *)&data[3]));
+        state->Pressure = (signed char)data[6] + 127;
         SETBITS(buttons, BTN_TOUCH, ((signed char)data[6] > -80) && !(data[5] & 0x20));
         SETBITS(buttons, BTN_STYLUS, (data[5] & 0x40));
         break;
@@ -675,6 +676,7 @@ static void WacomHandler_penpartner(struct usbtablet *um)
 static void WacomHandler_dtu(struct usbtablet *um)
 {
     UBYTE *data = um->UsbData;
+    struct WacomState *state = &um->currentState;
     int prox = data[1] & 0x20;
     uint64 buttons = 0;
 
@@ -690,14 +692,14 @@ static void WacomHandler_dtu(struct usbtablet *um)
     }
     SETBITS(buttons, BTN_STYLUS, data[1] & 0x02);
     SETBITS(buttons, BTN_STYLUS2, data[1] & 0x10);
-    um->X = LE_INT16(*((int16 *)&data[2]));
-    um->Y = LE_INT16(*((int16 *)&data[4]));
-    um->Pressure = ((data[7] & 0x01) << 8) | data[6];
+    state->X = LE_INT16(*((int16 *)&data[2]));
+    state->Y = LE_INT16(*((int16 *)&data[4]));
+    state->Pressure = ((data[7] & 0x01) << 8) | data[6];
     SETBITS(buttons, BTN_TOUCH, data[1] & 0x05);
     if (!prox) { /* out-prox */
         um->id[0] = 0;
     }
-    um->proximity[0] = prox;
+    state->proximity[0] = prox;
     //input_report_abs(input, ABS_MISC, wacom->id[0]);
     SendMouseEvent(um, buttons);
     SendTabletEvent(0, um, buttons);
@@ -709,6 +711,7 @@ static int WacomHandler_dtus(struct usbtablet *um)
 {
     UBYTE *data = um->UsbData;
     struct wacom_features *features = um->features;
+    struct WacomState *state = &um->currentState;
     unsigned short prox, pressure = 0;
     uint64 buttons = 0;
 
@@ -753,14 +756,14 @@ static int WacomHandler_dtus(struct usbtablet *um)
         SETBITS(buttons, BTN_STYLUS2, data[1] & 0x40);
         if (features->type  == DTK2451) {
             pressure = LE_INT16(*((int16 *)&data[2]));
-            um->X = LE_INT16(*((int16 *)&data[4]));
-            um->Y = LE_INT16(*((int16 *)&data[6]));
+            state->X = LE_INT16(*((int16 *)&data[4]));
+            state->Y = LE_INT16(*((int16 *)&data[6]));
         } else {
             pressure = ((data[1] & 0x03) << 8) | (data[2] & 0xff);
-            um->X = BE_INT16(*((int16 *)&data[3]));
-            um->Y = BE_INT16(*((int16 *)&data[5]));
+            state->X = BE_INT16(*((int16 *)&data[3]));
+            state->Y = BE_INT16(*((int16 *)&data[5]));
         }
-        um->Pressure = pressure;
+        state->Pressure = pressure;
         SETBITS(buttons, BTN_TOUCH, pressure > 10);
 
         if (!prox) /* out-prox */
@@ -779,6 +782,7 @@ static int WacomHandler_dtus(struct usbtablet *um)
 static int WacomHandler_dth1152(struct usbtablet *wacom)
 {
     unsigned char *data = wacom->UsbData;
+    struct WacomState *state = &wacom->currentState;
     unsigned short prox, pressure = 0;
     uint64 buttons = 0;
 
@@ -809,10 +813,10 @@ static int WacomHandler_dth1152(struct usbtablet *wacom)
             wacom->id[0] = STYLUS_DEVICE_ID;
         }
         SETBITS(buttons, BTN_STYLUS, data[1] & 0x20);
-        wacom->X = LE_INT16(*((int16 *)&data[4]));
-        wacom->Y = LE_INT16(*((int16 *)&data[6]));
+        state->X = LE_INT16(*((int16 *)&data[4]));
+        state->Y = LE_INT16(*((int16 *)&data[6]));
         pressure = data[2] | (data[3] << 8);
-        wacom->Pressure = pressure;
+        state->Pressure = pressure;
         SETBITS(buttons, BTN_TOUCH, data[1] & 0x10);
 
         if (!prox)
@@ -834,6 +838,7 @@ static void WacomHandler_pl(struct usbtablet *um)
     unsigned char *data = um->UsbData;
     int prox, pressure;
     uint64 buttons = 0;
+    struct WacomState *state = &um->currentState;
 
     if (data[0] != WACOM_REPORT_PENABLED) {
         DebugLog(0, um, "WacomHandler_pl_irq: received unknown report #%d", data[0]);
@@ -855,7 +860,7 @@ static void WacomHandler_pl(struct usbtablet *um)
          * pressed else choose pen. if not a proximity change from out to in, send
          * an out of proximity for previous tool then a in for new tool.
          */
-        if (!um->proximity[0]) {
+        if (!state->proximity[0]) {
             /* Eraser bit set for DTF */
             if (data[1] & 0x10)
                 um->tool[1] = BTN_TOOL_RUBBER;
@@ -866,7 +871,7 @@ static void WacomHandler_pl(struct usbtablet *um)
             /* was entered with stylus2 pressed */
             if (um->tool[1] == BTN_TOOL_RUBBER && !(data[4] & 0x20)) {
                 /* report out proximity for previous tool */
-                um->proximity[1] = 0;
+                state->proximity[1] = 0;
                 SendTabletEvent(1, um, buttons);
                 um->tool[1] = BTN_TOOL_PEN;
                 return;
@@ -877,11 +882,11 @@ static void WacomHandler_pl(struct usbtablet *um)
             um->tool[1] = BTN_TOOL_PEN;
             um->id[0] = STYLUS_DEVICE_ID;
         }
-        um->proximity[1] = prox; /* report in proximity for tool */
+        state->proximity[1] = prox; /* report in proximity for tool */
         //input_report_abs(input, ABS_MISC, wacom->id[0]); /* report tool id */
-        um->X = data[3] | (data[2] << 7) | ((data[1] & 0x03) << 14);
-        um->Y = data[6] | (data[5] << 7) | ((data[4] & 0x03) << 14);
-        um->Pressure = pressure;
+        state->X = data[3] | (data[2] << 7) | ((data[1] & 0x03) << 14);
+        state->Y = data[6] | (data[5] << 7) | ((data[4] & 0x03) << 14);
+        state->Pressure = pressure;
 
         SETBITS(buttons, BTN_TOUCH, data[4] & 0x08);
         SETBITS(buttons, BTN_STYLUS, data[4] & 0x10);
@@ -893,10 +898,10 @@ static void WacomHandler_pl(struct usbtablet *um)
             /* Unknown tool selected default to pen tool */
             um->tool[1] = BTN_TOOL_PEN;
         }
-        um->proximity[1] = prox;
+        state->proximity[1] = prox;
     }
 
-    um->proximity[0] = prox; /* Save proximity state */
+    state->proximity[0] = prox; /* Save proximity state */
 
     SendMouseEvent(um, buttons);
     SendTabletEvent(1, um, buttons);
@@ -908,6 +913,7 @@ static void WacomHandler_ptu(struct usbtablet *um)
 {
     unsigned char *data = um->UsbData;
     uint64 buttons = 0;
+    struct WacomState *state = &um->currentState;
 
     if (data[0] != WACOM_REPORT_PENABLED) {
         DebugLog(0, um, "WacomHandler_ptu_irq: received unknown report #%d\n", data[0]);
@@ -916,19 +922,19 @@ static void WacomHandler_ptu(struct usbtablet *um)
 
     if (data[1] & 0x04) {
         um->tool[0] = BTN_TOOL_RUBBER;
-        um->proximity[0] = data[1] & 0x20;
+        state->proximity[0] = data[1] & 0x20;
         SETBITS(buttons, BTN_TOUCH, data[1] & 0x08);
         um->id[0] = ERASER_DEVICE_ID;
     } else {
         um->tool[0] = BTN_TOOL_PEN;
-        um->proximity[0] = data[1] & 0x20;
+        state->proximity[0] = data[1] & 0x20;
         SETBITS(buttons, BTN_TOUCH, data[1] & 0x01);
         um->id[0] = STYLUS_DEVICE_ID;
     }
     //input_report_abs(input, ABS_MISC, wacom->id[0]); /* report tool id */
-    um->X = LE_INT16(*((int16 *)&data[2]));
-    um->Y = LE_INT16(*((int16 *)&data[4]));
-    um->Pressure = LE_INT16(*((int16 *)&data[6]));
+    state->X = LE_INT16(*((int16 *)&data[2]));
+    state->Y = LE_INT16(*((int16 *)&data[4]));
+    state->Pressure = LE_INT16(*((int16 *)&data[6]));
     SETBITS(buttons, BTN_STYLUS, data[1] & 0x02);
     SETBITS(buttons, BTN_STYLUS2, data[1] & 0x10);
     
@@ -944,6 +950,7 @@ static void WacomHandler_bpt_touch(struct usbtablet *um)
     const struct wacom_features *features = um->features;
     UBYTE *data = um->UsbData;
     int i = 0;
+    struct WacomState *state = &um->currentState;
 
     if (data[0] != 0x02)
         return;
@@ -962,8 +969,8 @@ static void WacomHandler_bpt_touch(struct usbtablet *um)
                 x <<= 5;
                 y <<= 5;
             }
-            um->X = x;
-            um->Y = y;
+            state->X = x;
+            state->Y = y;
         }
     }
 
@@ -986,6 +993,7 @@ static void WacomHandler_bpt3_touch_msg(struct usbtablet *um, unsigned char *dat
     BOOL touch = data[1] & 0x80;
     //int slot = data[0] - 2;  /* data[0] is between 2 and 17 */
     uint64 buttons = *pButtons;
+    struct WacomState *state = &um->currentState;
 
     touch = touch && report_touch_events(um);
 
@@ -1018,8 +1026,8 @@ static void WacomHandler_bpt3_touch_msg(struct usbtablet *um, unsigned char *dat
             height = width * y_res / x_res;
         }
 
-        um->X = x;
-        um->Y = y;
+        state->X = x;
+        state->Y = y;
         //input_report_abs(input, ABS_MT_TOUCH_MAJOR, width);
         //input_report_abs(input, ABS_MT_TOUCH_MINOR, height);
     }
@@ -1086,6 +1094,7 @@ static void WacomHandler_bpt_pen(struct usbtablet *um)
     BOOL pen = FALSE, btn1 = FALSE, btn2 = FALSE;
     BOOL range, prox, rdy;
     uint64 buttons = 0;
+    struct WacomState *state = &um->currentState;
 
     if (data[0] != WACOM_REPORT_PENABLED)
         return;
@@ -1136,11 +1145,11 @@ static void WacomHandler_bpt_pen(struct usbtablet *um)
         SETBITS(buttons, BTN_STYLUS2, btn2);
 
         if (prox || !range) {
-            um->X = x;
-            um->Y = y;
+            state->X = x;
+            state->Y = y;
         }
-        um->Pressure = p;
-        um->distance[0] = d;
+        state->Pressure = p;
+        state->distance[0] = d;
 
         //input_report_key(input, wacom->tool[0], range); /* PEN or RUBBER */
         //input_report_abs(input, ABS_MISC, wacom->id[0]); /* TOOL ID */
@@ -1182,6 +1191,7 @@ static void WacomHandler_graphire(struct usbtablet *um)
     int prox;
     int rw = 0;
     uint64 buttons = 0;
+    struct WacomState *state = &um->currentState;
 
     DebugLog(45, um, "WacomHandler_graphire: in\n");
 
@@ -1226,10 +1236,10 @@ static void WacomHandler_graphire(struct usbtablet *um)
                 break;
             }
         }
-        um->X = LE_INT16(*((int16 *)&data[2]));
-        um->Y = LE_INT16(*((int16 *)&data[4]));
+        state->X = LE_INT16(*((int16 *)&data[2]));
+        state->Y = LE_INT16(*((int16 *)&data[4]));
         if (um->tool[0] != BTN_TOOL_MOUSE) {
-            um->Pressure = (data[6] | ((data[7] & 0x03) << 8));
+            state->Pressure = (data[6] | ((data[7] & 0x03) << 8));
             SETBITS(buttons, BTN_TOUCH, data[1] & 0x01);
             SETBITS(buttons, BTN_STYLUS, data[1] & 0x02);
             SETBITS(buttons, BTN_STYLUS2, data[1] & 0x04);
@@ -1238,10 +1248,10 @@ static void WacomHandler_graphire(struct usbtablet *um)
             SETBITS(buttons, BTN_RIGHT, data[1] & 0x02);
             if (features->type == WACOM_G4 ||
                     features->type == WACOM_MO) {
-                um->distance[0] = data[6] & 0x3f;
+                state->distance[0] = data[6] & 0x3f;
                 rw = (data[7] & 0x04) - (data[7] & 0x03);
             } else {
-                um->distance[0] = data[7] & 0x3f;
+                state->distance[0] = data[7] & 0x3f;
                 rw = -(signed char)data[6];
             }
             //input_report_rel(input, REL_WHEEL, rw);
@@ -1251,7 +1261,7 @@ static void WacomHandler_graphire(struct usbtablet *um)
             um->id[0] = 0;
         }
         //input_report_abs(input, ABS_MISC, wacom->id[0]); /* report tool id */
-        um->proximity[0] = prox;
+        state->proximity[0] = prox;
         //input_event(input, EV_MSC, MSC_SERIAL, 1);
         if (0 != rw ) {
             SendWheelEvent(um, 0, rw, TRUE);
@@ -1270,7 +1280,7 @@ static void WacomHandler_graphire(struct usbtablet *um)
             SETBITS(buttons, BTN_BACK, (data[7] & 0x40));
             SETBITS(buttons, BTN_FORWARD, (data[7] & 0x80));
             rw = ((data[7] & 0x18) >> 3) - ((data[7] & 0x20) >> 3);
-            um->proximity[1] = prox;
+            state->proximity[1] = prox;
             if (!prox)
                 um->id[1] = 0;
             relative = TRUE;
@@ -1287,7 +1297,7 @@ static void WacomHandler_graphire(struct usbtablet *um)
             SETBITS(buttons, BTN_FORWARD, (data[7] & 0x10));
             SETBITS(buttons, BTN_RIGHT,   (data[7] & 0x40));
             rw =  (data[8] & 0x7f);
-            um->proximity[1] = prox;
+            state->proximity[1] = prox;
             if (!prox)
                 um->id[1] = 0;
             relative = FALSE;
@@ -1317,6 +1327,7 @@ static int wacom_intuos_pad(struct usbtablet *wacom)
     int strip1 = 0, strip2 = 0;
     uint32 buttonsSet = 0;
     BOOL prox = FALSE;
+    struct WacomState *state = &wacom->currentState;
 
     /* pad packets. Works as a second tool and is always in prox */
     if (!(data[0] == WACOM_REPORT_INTUOSPAD || data[0] == WACOM_REPORT_INTUOS5PAD ||
@@ -1423,7 +1434,7 @@ static int wacom_intuos_pad(struct usbtablet *wacom)
         SendWheelEvent(wacom, hWheel, vWheel, FALSE);
     }
 
-    wacom->proximity[1] = prox ? TRUE : FALSE;
+    state->proximity[1] = prox ? TRUE : FALSE;
     wacom->tool[1] = PAD_DEVICE_ID;
 
     //input_event(input, EV_MSC, MSC_SERIAL, 0xffffffff);
@@ -1530,6 +1541,7 @@ static int wacom_intuos_inout(struct usbtablet *um)
 {
     const struct wacom_features *features = um->features;
     unsigned char *data = um->UsbData;
+    struct WacomState *state = &um->currentState;
     int idx = (features->type == INTUOS) ? (data[1] & 0x01) : 0;
 
     if (!(((data[1] & 0xfc) == 0xc0) ||  /* in prox */
@@ -1562,8 +1574,8 @@ static int wacom_intuos_inout(struct usbtablet *um)
         /* in Range while exiting */
         if (um->reporting_data) {
             //input_report_key(input, BTN_TOUCH, 0);
-            um->Pressure = 0;
-            um->distance[idx] = features->distance_max;
+            state->Pressure = 0;
+            state->distance[idx] = features->distance_max;
             return 2;
         }
         return 1;
@@ -1582,10 +1594,10 @@ static int wacom_intuos_inout(struct usbtablet *um)
          * Reset all states otherwise we lose the initial states
          * when in-prox next time
          */
-        um->distance[idx] = 0;
-        um->tiltX = 0;
-        um->tiltY = 0;
-        um->proximity[idx] = FALSE;
+        state->distance[idx] = 0;
+        state->tiltX = 0;
+        state->tiltY = 0;
+        state->proximity[idx] = FALSE;
         //input_event(input, EV_MSC, MSC_SERIAL, wacom->serial[idx]);
         um->id[idx] = 0;
         //SendMouseEvent(um, 0);
@@ -1618,6 +1630,7 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
     int idx = (features->type == INTUOS) ? (data[1] & 0x01) : 0;
     unsigned char type = (data[1] >> 1) & 0x0F;
     unsigned int x, y, distance, t;
+    struct WacomState *state = &um->currentState;
 
     if (data[0] != WACOM_REPORT_PENABLED && data[0] != WACOM_REPORT_CINTIQ &&
         data[0] != WACOM_REPORT_INTUOS_PEN)
@@ -1654,9 +1667,9 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
         y >>= 1;
         distance >>= 1;
     }
-    um->X = x;
-    um->Y = y;
-    um->distance[idx] = distance;
+    state->X = x;
+    state->Y = y;
+    state->distance[idx] = distance;
 
     switch (type) {
         case 0x00:
@@ -1667,10 +1680,10 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
             t = (data[6] << 3) | ((data[7] & 0xC0) >> 5) | (data[1] & 1);
             if (features->pressure_max < 2047)
                 t >>= 1;
-            um->Pressure = t;
+            state->Pressure = t;
             if (features->type != INTUOSHT2) {
-                um->tiltX = ((data[7] << 1) & 0x7e) | (data[8] >> 7);
-                um->tiltY = data[8] & 0x7f;
+                state->tiltX = ((data[7] << 1) & 0x7e) | (data[8] >> 7);
+                state->tiltY = data[8] & 0x7f;
             }
             SETBITS(*pButtons, BTN_STYLUS, (data[1] & 2));
             SETBITS(*pButtons, BTN_STYLUS2, (data[1] & 4));
@@ -1680,8 +1693,8 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
         case 0x0a:
             /* airbrush second packet */
             SendWheelEvent(um, 0, (data[6] << 2) | ((data[7] >> 6) & 3), FALSE);
-            um->tiltX = ((data[7] << 1) & 0x7e) | (data[8] >> 7);
-            um->tiltY = data[8] & 0x7f;
+            state->tiltX = ((data[7] << 1) & 0x7e) | (data[8] >> 7);
+            state->tiltY = data[8] & 0x7f;
             break;
 
         case 0x05:
@@ -1691,7 +1704,7 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
                 t = (data[6] << 3) | ((data[7] >> 5) & 7);
                 t = (data[7] & 0x20) ? ((t > 900) ? ((t-1) / 2 - 1350) :
                     ((t-1) / 2 + 450)) : (450 - t / 2) ;
-                um->Z = t;
+                state->Z = t;
             } else {
                 /* 4D mouse 2nd packet */
                 t = (data[6] << 3) | ((data[7] >> 5) & 7);
@@ -1722,8 +1735,8 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
             SETBITS(*pButtons, BTN_SIDE,   data[6] & 0x08);
             SETBITS(*pButtons, BTN_EXTRA,  data[6] & 0x10);
 
-            um->tiltX = ((data[7] << 1) & 0x7e) | (data[8] >> 7);
-            um->tiltY = data[8] & 0x7f;
+            state->tiltX = ((data[7] << 1) & 0x7e) | (data[8] >> 7);
+            state->tiltY = data[8] & 0x7f;
             break;
 
         case 0x08:

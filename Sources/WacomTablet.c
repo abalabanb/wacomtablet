@@ -50,6 +50,8 @@
  *                               and TiltY were exchanged)
  *                      - Added: tilt display in commodity window
  *                      - Updated: reworked layout of current/max values
+ *                      - Updated: lowered CPU load by filtering out events with
+ *                                 too close values
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1148,6 +1150,8 @@ static int32  MaxP = 0;
 static int32  MaxX = 0;
 static int32  MaxY = 0;
 
+#define max(a,b) ((a) > (b) ? (a) : (b))
+
 uint32 HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint32 buttons)
 {
     DebugLog(10, ut, "HandleExecuteActions in, buttons #%08x prevbuttons #%08x\n", buttons, ut->PrevButtons);
@@ -1187,7 +1191,7 @@ uint32 HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonActi
 
 uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWheelData, BOOL relative)
 {
-    int32 vWheel = um->wheel[1], hWheel = um->wheel[0];
+    int32 vWheel = um->currentState.wheel[1], hWheel = um->currentState.wheel[0];
     if(!relative)
     {
         DebugLog(10, um, "SendWheelEvent: old vWheel %ld, vertWheelData %ld,"
@@ -1205,7 +1209,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
                 vWheel = (vWheel > 0) ? 20 : -20;
             }
         }
-        um->wheel[1] = vertWheelData;
+        um->prevState.wheel[1] = vertWheelData;
         if(!horizWheelData)
         {
             hWheel = 0;   
@@ -1218,7 +1222,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
                 hWheel = (hWheel > 0)? 20 : -20;
             }
         }
-        um->wheel[0] = horizWheelData;
+        um->prevState.wheel[0] = horizWheelData;
     }
     else
     {
@@ -1449,18 +1453,55 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
     return 0;
 }
 
+BOOL TabletStateHasChanged(struct usbtablet *wacom)
+{
+    BOOL change = 0;
+
+    if(abs(wacom->currentState.X - wacom->prevState.X) >= max(10, wacom->fuzzX)) change++;
+    if(abs(wacom->currentState.Y - wacom->prevState.Y) >= max(10, wacom->fuzzY)) change++;
+    if(abs(wacom->currentState.Z - wacom->prevState.Z) >= max(10, wacom->fuzzZ)) change++;
+    if(abs(wacom->currentState.tiltX - wacom->prevState.tiltX) >= max(4, wacom->fuzzTiltX)) change++;
+    if(abs(wacom->currentState.tiltY - wacom->prevState.tiltY) >= max(4, wacom->fuzzTiltY)) change++;
+    if(abs(wacom->currentState.tiltZ - wacom->prevState.tiltZ) >= max(4, 1/*wacom->fuzzTiltZ*/)) change++;
+    if(abs(wacom->currentState.Pressure - wacom->prevState.Pressure) >= max(1, wacom->features->pressure_fuzz)) change++;
+    if(abs(wacom->currentState.proximity[0] - wacom->prevState.proximity[0]) >= 1) change++;
+    if(abs(wacom->currentState.proximity[1] - wacom->prevState.proximity[1]) >= 1) change++;
+    if(abs(wacom->currentState.wheel[0] - wacom->prevState.wheel[0]) >= max(1, wacom->fuzzWheel)) change++;
+    if(abs(wacom->currentState.wheel[1] - wacom->prevState.wheel[1]) >= max(1, wacom->fuzzWheel)) change++;
+
+    if(change)
+    {
+        DebugLog(40, wacom, "TabletStateHasChanged: change detected\n");
+        DebugLog(40, wacom, "TabletStateHasChanged: current: {X:%ld, Y:%ld, Z:%ld, tiltX:%ld, tiltY:%ld, tiltZ:%ld, P:%ld,"
+                            " dist:{%ld, %ld}, prox:{%d:%d}, wheel:{%ld,%ld}}\n",
+                            wacom->currentState.X, wacom->currentState.Y, wacom->currentState.Z,
+                            wacom->currentState.tiltX, wacom->currentState.tiltY, wacom->currentState.tiltZ,
+                            wacom->currentState.Pressure, wacom->currentState.distance[0], wacom->currentState.distance[1],
+                            wacom->currentState.proximity[0], wacom->currentState.proximity[1], wacom->currentState.wheel[0],
+                            wacom->currentState.wheel[1]);
+        DebugLog(40, wacom, "TabletStateHasChanged: prev: {X:%ld, Y:%ld, Z:%ld, tiltX:%ld, tiltY:%ld, tiltZ:%ld, P:%ld,"
+                            " dist:{%ld, %ld}, prox:{%d:%d}, wheel:{%ld,%ld}}\n",
+                            wacom->prevState.X, wacom->prevState.Y, wacom->prevState.Z,
+                            wacom->prevState.tiltX, wacom->prevState.tiltY, wacom->prevState.tiltZ,
+                            wacom->prevState.Pressure, wacom->prevState.distance[0], wacom->prevState.distance[1],
+                            wacom->prevState.proximity[0], wacom->prevState.proximity[1], wacom->prevState.wheel[0],
+                            wacom->prevState.wheel[1]);
+    }
+
+    return (change>0)?TRUE:FALSE;
+}
+
 uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
 {
-    DebugLog(45, um, "SendTabletEvent: buttons #%08x\n", buttons );
-
-    if (( um->X | um->Y ) != 0 )
+    if (TabletStateHasChanged(um))
     {
+        DebugLog(45, um, "SendTabletEvent: buttons #%08x\n", buttons );
 
         if(um->win)
         {
-            if (um->Pressure > MaxP) MaxP = um->Pressure;
-            if (um->X > MaxX) MaxX = um->X;
-            if (um->Y > MaxY) MaxY = um->Y;
+            if (um->currentState.Pressure > MaxP) MaxP = um->currentState.Pressure;
+            if (um->currentState.X > MaxX) MaxX = um->currentState.X;
+            if (um->currentState.Y > MaxY) MaxY = um->currentState.Y;
         }
         if(um->win)
         {
@@ -1470,23 +1511,23 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
         {
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTX],um->win,NULL,
-                                                    INTEGER_Number,um->X,
+                                                    INTEGER_Number,um->currentState.X,
                                                     TAG_DONE);
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTY],um->win,NULL,
-                                                    INTEGER_Number,um->Y,
+                                                    INTEGER_Number,um->currentState.Y,
                                                     TAG_DONE);
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTTILTX],um->win,NULL,
-                                                    INTEGER_Number,um->tiltX,
+                                                    INTEGER_Number,um->currentState.tiltX,
                                                     TAG_DONE);
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTTILTY],um->win,NULL,
-                                                    INTEGER_Number,um->tiltY,
+                                                    INTEGER_Number,um->currentState.tiltY,
                                                     TAG_DONE);
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_CURRENTP],um->win,NULL,
-                                                    INTEGER_Number,um->Pressure,
+                                                    INTEGER_Number,um->currentState.Pressure,
                                                     TAG_DONE);
 
             um->IIntuition->SetGadgetAttrs(um->gadgets[GID_MAXX],um->win,NULL,
@@ -1518,38 +1559,38 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
 
             um->IENT.ient_RangeX = um->RangeX - um->TopX;
             um->IENT.ient_RangeY = um->RangeY - um->TopY;
-            if (um->X < um->TopX)
+            if (um->currentState.X < um->TopX)
             {
                 um->IENT.ient_TabletX = 0;
             }
             else
             {
-                um->IENT.ient_TabletX = um->X - um->TopX;
+                um->IENT.ient_TabletX = um->currentState.X - um->TopX;
             }
-            if (um->Y < um->TopY)
+            if (um->currentState.Y < um->TopY)
             {
                 um->IENT.ient_TabletY = 0;
             }
             else
             {
-                um->IENT.ient_TabletY = um->Y - um->TopY;
+                um->IENT.ient_TabletY = um->currentState.Y - um->TopY;
             }
             um->IENT_Tags[0].ti_Tag = TABLETA_Pressure;
             // normalize to fill signed long integer range
-            um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->Pressure) * 0xffffffff / um->RangeP ) - 0x80000000;
+            um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->currentState.Pressure) * 0xffffffff / um->RangeP ) - 0x80000000;
             // identify tool
             um->IENT_Tags[1].ti_Tag = TABLETA_Tool;
             um->IENT_Tags[1].ti_Data = um->tool[toolIdx];
             um->IENT_Tags[2].ti_Tag = TABLETA_InProximity;
-            um->IENT_Tags[2].ti_Data = um->proximity[toolIdx];
+            um->IENT_Tags[2].ti_Data = um->currentState.proximity[toolIdx];
             um->IENT_Tags[3].ti_Tag = TABLETA_TabletZ;
-            um->IENT_Tags[3].ti_Data = um->Z;
+            um->IENT_Tags[3].ti_Data = um->currentState.Z;
             um->IENT_Tags[4].ti_Tag = TABLETA_AngleX;
-            um->IENT_Tags[4].ti_Data = -(um->tiltY - ((um->maxTiltY - um->minTiltY) / 2)) * (0x7fffffff / 360);
+            um->IENT_Tags[4].ti_Data = -(um->currentState.tiltY - ((um->maxTiltY - um->minTiltY) / 2)) * (0x7fffffff / 360);
             um->IENT_Tags[5].ti_Tag = TABLETA_AngleY;
-            um->IENT_Tags[5].ti_Data = (um->tiltX - ((um->maxTiltX - um->minTiltX) / 2)) * (0x7fffffff / 360);
+            um->IENT_Tags[5].ti_Data = (um->currentState.tiltX - ((um->maxTiltX - um->minTiltX) / 2)) * (0x7fffffff / 360);
             um->IENT_Tags[6].ti_Tag = TABLETA_AngleZ;
-            um->IENT_Tags[6].ti_Data = um->tiltZ;
+            um->IENT_Tags[6].ti_Data = um->currentState.tiltZ;
 
             DebugLog(20, um, "NewTablet: X %ld, Y %ld, Pressure %ld, Tool %ld Proximity %ld, AngleX %ld, AngleY %ld, AngleZ %ld\n",
                             um->IENT.ient_TabletX, 
@@ -1586,24 +1627,24 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
 
             um->IEPT.iept_Range.X = um->RangeX - um->TopX;
             um->IEPT.iept_Range.Y = um->RangeY - um->TopY;
-            if( um->X < um->TopX )
+            if( um->currentState.X < um->TopX )
             {
                 um->IEPT.iept_Value.X = 0;
             }
             else
             {
-                um->IEPT.iept_Value.X = um->X - um->TopX;
+                um->IEPT.iept_Value.X = um->currentState.X - um->TopX;
             }
-            if( um->Y < um->TopY )
+            if( um->currentState.Y < um->TopY )
             {
                 um->IEPT.iept_Value.Y = 0;
             }
             else
             {
-                um->IEPT.iept_Value.Y = um->Y - um->TopY;
+                um->IEPT.iept_Value.Y = um->currentState.Y - um->TopY;
             }
             // normalize pressure, in old Tablet data range is -128 - 127
-            um->IEPT.iept_Pressure = (um->Pressure * 0xff / um->RangeP) - 0x80;
+            um->IEPT.iept_Pressure = (um->currentState.Pressure * 0xff / um->RangeP) - 0x80;
 
             DebugLog(20, um, "Pressure %ld\n", um->IEPT.iept_Pressure);
 
@@ -1628,7 +1669,11 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             um->IExec->DoIO( (struct IORequest *)um->InputIOReq );
 
         }
+
     }
+
+    um->IExec->CopyMem(&um->currentState, &um->prevState, sizeof(struct WacomState));
+
     return 0;
 }
 

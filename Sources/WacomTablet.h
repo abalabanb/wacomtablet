@@ -505,6 +505,19 @@ enum {
 } gids;
 ////
 
+struct WacomState {
+    uint32                  X;
+    uint32                  Y;
+    uint32                  Z;
+    uint32                  tiltX;
+    uint32                  tiltY;
+    uint32                  tiltZ;
+    uint32                  Pressure;
+    uint32                  distance[2];
+    BOOL                    proximity[2];
+    int32                   wheel[2];
+};
+
 struct usbtablet {
     uint32                  TopX;
     uint32                  TopY;
@@ -623,7 +636,7 @@ struct usbtablet {
 
     struct Gadget*          gadgets[GID_LAST];
     
-    // capabilities
+    // features & capabilities
     struct wacom_features*  features;
     uint64                  buttonCapabilities;
     uint64                  toolCapabilities;
@@ -637,28 +650,22 @@ struct usbtablet {
     int32                   minTiltY, maxTiltY, fuzzTiltY;
 
     struct ButtonAction     buttonAction[64];
+    UWORD                   Curve[7];
 
     uint8                   debugLevel;
 
-    uint32                  X;
-    uint32                  Y;
-    uint32                  Z;
-    uint32                  tiltX;
-    uint32                  tiltY;
-    uint32                  tiltZ;
+    struct WacomState       currentState;
+    struct WacomState       prevState;
 
-    uint32                  Pressure;
-    UWORD                   Curve[7];
-    uint32                  id[2];
+    // From wacom_wac structure
     UBYTE                   tool[2];
-    uint32                  distance[2];
-    BOOL                    proximity[2];
-    int32                   wheel[2];
-    BOOL                    touch_down;
-    BOOL                    stylus_in_proximity;
+    uint32                  id[2];
     BOOL                    reporting_data;
     int*                    slots;
-
+    // From wacom_shared
+    BOOL                    touch_down;
+    BOOL                    stylus_in_proximity;
+    // Temporary
     BOOL                    inputPropDirect;
 };
 
