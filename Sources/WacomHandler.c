@@ -38,7 +38,9 @@
 ///
 
 static void wacom_report_numbered_buttons(/*struct input_dev *input_dev,*/
-                int button_count, int mask, uint32 *pButtons);
+                int button_count, int mask, uint64 *pButtons);
+static void wacom_setup_numbered_buttons(/*struct input_dev *input_dev,*/
+                uint64* pButtons, int button_count);
 static int WacomCreateSlots(struct usbtablet *um);
 static inline BOOL delay_pen_events(struct usbtablet *wacom);
 static inline BOOL report_touch_events(struct usbtablet *wacom);
@@ -219,6 +221,7 @@ void WacomSetupDeviceQuirks(struct usbtablet *um)
 void WacomSetupCapabilities(struct usbtablet* um)
 {
     const struct wacom_features *features = um->features;
+    int numbered_buttons = features->numbered_buttons;
     int err;
 
     //if (features->type == REMOTE && input_dev == wacom_wac->input)
@@ -412,7 +415,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
             //__clear_bit(ABS_MISC, input_dev->absbit);
 
             /* pad is on pen interface */
-            //numbered_buttons = 0;
+            numbered_buttons = 0;
             SETBITS(um->toolCapabilities, BTN_TOOL_FINGER, 1);
             SETBITS(um->toolCapabilities, BTN_TOOL_DOUBLETAP, 1);
             SETBITS(um->toolCapabilities, BTN_TOOL_TRIPLETAP, 1);
@@ -621,7 +624,16 @@ void WacomSetupCapabilities(struct usbtablet* um)
         break;
     }
     
-    DebugLog(10, um, "WacomSetupCapabilities: buttons=%08x tools=%08x\n", um->buttonCapabilities, um->toolCapabilities);    
+    /*
+     * Because all devices with numbered buttons have the pen and pad on
+     * the same interface we can rely on this check to avoid creating
+     * extra pads. Future devices may require creating a more involved
+     * check.
+     */
+    if (features->device_type == BTN_TOOL_PEN || features->type == REMOTE)
+        wacom_setup_numbered_buttons(&um->buttonCapabilities, numbered_buttons);
+
+    DebugLog(10, um, "WacomSetupCapabilities: buttons=%016llx tools=%016llx\n", um->buttonCapabilities, um->toolCapabilities);
 }
 
 ////
@@ -1325,7 +1337,7 @@ static int wacom_intuos_pad(struct usbtablet *wacom)
     int keys = 0, nkeys = 0;
     int ring1 = 0, ring2 = 0;
     int strip1 = 0, strip2 = 0;
-    uint32 buttonsSet = 0;
+    uint64 buttonsSet = 0;
     BOOL prox = FALSE;
     struct WacomState *state = &wacom->currentState;
 
@@ -1851,8 +1863,23 @@ static int wacom_numbered_button_to_key(int n)
         return -1; // 0; // ABA: BTN_0 has value 0, changed error to -1 to differentiate
 }
 
+static void wacom_setup_numbered_buttons(/*struct input_dev *input_dev,*/
+                uint64* pButtons, int button_count)
+{
+    int i;
+
+    for (i = 0; i < button_count; i++) {
+        int key = wacom_numbered_button_to_key(i);
+
+        if (key >= 0) /* (key) */  // ABA: changed due to key emulation constraints, 0 is a possible value
+        {
+            SETBITS(*pButtons, key, 1);
+        }
+    }
+}
+
 static void wacom_report_numbered_buttons(/*struct input_dev *input_dev,*/
-                int button_count, int mask, uint32* pButtons)
+                int button_count, int mask, uint64* pButtons)
 {
     int i;
 

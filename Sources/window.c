@@ -225,7 +225,7 @@ Object *CreateWindow(struct usbtablet *um)
         DisposeWindow(um);
     }
 
-    DebugLog(35, um, "buttonCapabilities is %08lx\n", um->buttonCapabilities);
+    DebugLog(35, um, "buttonCapabilities is %016llx\n", um->buttonCapabilities);
 
     um->windowLayout = (struct Gadget *)um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
         LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
