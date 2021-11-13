@@ -52,6 +52,10 @@
  *                      - Updated: reworked layout of current/max values
  *                      - Updated: lowered CPU load by filtering out events with
  *                                 too close values
+ *                      - Added: support of actions double-click and hold-click
+ *                      - Fixed: debug level was instated after setting-up tablet
+ *                               capabilities, meaning no debug was ever emitted
+ *                               during this phase
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -880,8 +884,6 @@ uint32 WacomStartup( struct usbtablet *um )
         return( FALSE );
     }
 
-    WacomSetupCapabilities(um);
-
     TEXT debug_var[10];
     if((um->IDOS->GetVar("WacomTablet/DEBUG",debug_var,sizeof(debug_var),GVF_GLOBAL_ONLY) > 0))
     {
@@ -892,6 +894,8 @@ uint32 WacomStartup( struct usbtablet *um )
     }
     LoadValues(um);
     DebugLog(20, um, "--> Prefs Loaded\n" );
+
+    WacomSetupCapabilities(um);
 
     /*set up commodity for GUI */
 
@@ -1177,6 +1181,35 @@ uint32 HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonActi
                         if(err)
                             DebugLog(10, ut, "Error launching keyshow %d\n", ut->IDOS->IoErr());
                     } break;
+                case ACTION_HOLD_CLIC:
+                    {
+                        ut->holdClick = !ut->holdClick;
+                        DebugLog(10, ut, "Hold-Click action detected for bit %d, hold-click is %s\n",
+                                        bit, ut->holdClick?"engaged":"disengaged");
+                    } break;
+                case ACTION_DOUBLE_CLIC:
+                    {
+                        // record state
+                        uint64 prevButtons = ut->PrevButtons;
+                        uint64 currButtons = ut->Buttons;
+
+                        uint32 buttons = 0;
+                        // send first click
+                        SETBITS(buttons, BTN_LEFT, 1);
+                        SendMouseEvent(ut, buttons);
+                        SETBITS(buttons, BTN_LEFT, 0);
+                        SendMouseEvent(ut, buttons);
+
+                        // send second click
+                        SETBITS(buttons, BTN_LEFT, 1);
+                        SendMouseEvent(ut, buttons);
+                        SETBITS(buttons, BTN_LEFT, 0);
+                        SendMouseEvent(ut, buttons);
+
+                        // restore state
+                        ut->PrevButtons = prevButtons;
+                        ut->Buttons = currButtons;
+                    } break;
                 default:
                     break;
             }
@@ -1263,7 +1296,7 @@ uint32 GetMouseButtons(struct usbtablet *um, struct ButtonAction buttonAction[],
             switch(buttonAction[bit].ba_action)
             {
                 case ACTION_CLIC: 
-                    SETBITS(result, BTN_LEFT, buttons & FLAG(bit));                
+                    SETBITS(result, BTN_LEFT, buttons & FLAG(bit));
                     break;
                 case ACTION_MIDDLE_CLIC:
                     SETBITS(result, BTN_MIDDLE, buttons & FLAG(bit));                
@@ -1281,6 +1314,12 @@ uint32 GetMouseButtons(struct usbtablet *um, struct ButtonAction buttonAction[],
                     break;
             }
         }
+    }
+
+    // enforce click holding, i.e. consider BTN_LEFT down while it is set
+    if(um->holdClick)
+    {
+        SETBITS(result, BTN_LEFT, 1);
     }
     
     return result;
@@ -1577,7 +1616,8 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             }
             um->IENT_Tags[0].ti_Tag = TABLETA_Pressure;
             // normalize to fill signed long integer range
-            um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->currentState.Pressure) * 0xffffffff / um->RangeP ) - 0x80000000;
+            //um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->currentState.Pressure) * 0xffffffff / um->RangeP ) - 0x80000000;
+            um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->currentState.Pressure) * 0x7fffffff / um->RangeP );
             // identify tool
             um->IENT_Tags[1].ti_Tag = TABLETA_Tool;
             um->IENT_Tags[1].ti_Data = um->tool[toolIdx];
@@ -1825,7 +1865,7 @@ void SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, i
     switch(paramName)
     {
         default:
-            DebugLog(0, um, "WacomHandler: unsupported value for paramName '%08x'", paramName);
+            DebugLog(0, um, "WacomTablet: unsupported value for paramName '%08x'\n", paramName);
             break;
         case ABS_X:
             um->minX = min;

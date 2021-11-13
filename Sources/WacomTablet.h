@@ -169,8 +169,8 @@ enum ButtonActionType {
     ACTION_RIGHT_CLIC,
     ACTION_4TH_CLIC,
     ACTION_5TH_CLIC,
-//    ACTION_DOUBLE_CLIC,
-//    ACTION_HOLD_CLIC,
+    ACTION_DOUBLE_CLIC,
+    ACTION_HOLD_CLIC,
     ACTION_SHOWKEY,
     ACTION_SWITCH_MODE,
     ACTION_QUALIFIER,
@@ -667,6 +667,7 @@ struct usbtablet {
     BOOL                    stylus_in_proximity;
     // Temporary
     BOOL                    inputPropDirect;
+    BOOL                    holdClick; // switched by ACTION_HOLD_CLIC
 };
 
 //// Debug macro
