@@ -56,6 +56,8 @@
  *                      - Fixed: debug level was instated after setting-up tablet
  *                               capabilities, meaning no debug was ever emitted
  *                               during this phase
+ *                      - Fixed: spurious additional mouse event was sent implying
+ *                               unexpected mouse pointer jumps
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1532,6 +1534,12 @@ BOOL TabletStateHasChanged(struct usbtablet *wacom)
 
 uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
 {
+    if (PAD_DEVICE_ID == um->tool[toolIdx] || 0 == um->id[toolIdx])
+    {
+        DebugLog(40, um, "SentTabletEvent: ignoring event tool=%08x, id=%08x\n", um->tool[toolIdx], um->id[toolIdx]);
+        return 0;
+    }
+
     if (TabletStateHasChanged(um))
     {
         DebugLog(45, um, "SendTabletEvent: buttons #%08x\n", buttons );
