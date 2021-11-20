@@ -46,8 +46,18 @@
     #define PREFS_KEY_ACTION "Action"
     #define PREFS_KEY_PARAMETER "Parameter"
 
-const LONG tabLabelIDs[] = { MSG_TAB_MISC_TITLE, MSG_TAB_PEN_TITLE, MSG_TAB_MOUSE_TITLE, MSG_TAB_TABLET_TITLE, 0 };
-CONST_STRPTR tabLabels[sizeof(tabLabelIDs)] = {NULL};
+const struct tabSetup {
+    LONG tabLabelID;
+    int8 capability;
+} tabSetups[] = {
+    {MSG_TAB_MISC_TITLE, -1},
+    {MSG_TAB_PEN_TITLE, BTN_TOOL_PEN},
+    {MSG_TAB_MOUSE_TITLE, BTN_TOOL_MOUSE},
+    {MSG_TAB_TABLET_TITLE, -1},
+    {0, -1}
+};
+struct List clickTabNodes;
+
 const LONG buttonActionLabelIDs[] = {
     MSG_ACTION_NONE,
     MSG_ACTION_CLICK,
@@ -67,17 +77,9 @@ const LONG buttonActionLabelIDs[] = {
  };
 CONST_STRPTR buttonActionLabels[sizeof(buttonActionLabelIDs)] = {NULL};
 
-
 BOOL OpenClasses(struct usbtablet *um)
 {
     int i = 0;
-    while(tabLabelIDs[i])
-    {
-        DebugLog(40, um, "translating, i=%d tabLabels[i]=%d", i, tabLabelIDs[i]);
-        tabLabels[i] = GetString(&um->localeInfo, (LONG)tabLabelIDs[i]);
-        i++;
-    }
-    i = 0;
     while(buttonActionLabelIDs[i])
     {
         buttonActionLabels[i] = GetString(&um->localeInfo, (LONG)buttonActionLabelIDs[i]);
@@ -135,6 +137,10 @@ BOOL OpenClasses(struct usbtablet *um)
     {
         return FALSE;
     }
+    if(!(um->IClickTab = (struct ClickTabIFace *)um->IExec->GetInterface((struct Library*)um->ClickTabClassLib,"main",1,0)))
+    {
+        return FALSE;
+    }
 
     if(!(um->ChooserClassLib = um->IIntuition->OpenClass("gadgets/chooser.gadget",0,&um->ChooserClassPtr)))
     {
@@ -155,6 +161,7 @@ VOID CloseClasses(struct usbtablet *um)
     um->IIntuition->CloseClass(um->CheckboxClassLib);
     um->IIntuition->CloseClass(um->SliderClassLib);
     um->IIntuition->CloseClass(um->StringClassLib);
+    um->IExec->DropInterface( (struct Interface *)um->IClickTab);
     um->IIntuition->CloseClass(um->ClickTabClassLib);
     um->IIntuition->CloseClass(um->ChooserClassLib);
 }
@@ -225,7 +232,22 @@ Object *CreateWindow(struct usbtablet *um)
         DisposeWindow(um);
     }
 
-    DebugLog(35, um, "buttonCapabilities is %016llx\n", um->buttonCapabilities);
+    /* prepare the clicktablabels list */
+    um->IExec->NewList(&clickTabNodes);
+    int i = 0;
+    while(tabSetups[i].tabLabelID)
+    {
+        struct  Node *currNode = um->IClickTab->AllocClickTabNode (
+                            TNA_Text, GetString(&um->localeInfo, tabSetups[i].tabLabelID),
+                            TNA_Number, i,
+                            TNA_Disabled, (-1 != tabSetups[i].capability)?!(HAS_FLAG(um->toolCapabilities,tabSetups[i].capability)):FALSE,
+                            TAG_END);
+        um->IExec->AddTail (&clickTabNodes, currNode);
+        i++;
+    }
+
+    DebugLog(35, um, "toolCapabilities is %016llx", um->toolCapabilities);
+    DebugLog(35, um, " buttonCapabilities is %016llx\n", um->buttonCapabilities);
 
     um->windowLayout = (struct Gadget *)um->IIntuition->NewObject(um->LayoutClassPtr,NULL,
         LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
@@ -235,7 +257,7 @@ Object *CreateWindow(struct usbtablet *um)
         LAYOUT_AddChild, um->gadgets[GID_CLICKTAB] = (struct Gadget *)um->IIntuition->NewObject(um->ClickTabClassPtr, NULL,
             GA_ID, GID_CLICKTAB,
             GA_RelVerify, TRUE,
-            GA_Text, tabLabels,
+            CLICKTAB_Labels,    &clickTabNodes,
 
             CLICKTAB_PageGroup, um->IIntuition->NewObject(NULL, "page.gadget",
                 /* We will defer layout/render changing pages! */
@@ -544,7 +566,7 @@ Object *CreateWindow(struct usbtablet *um)
                     LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
                     LAYOUT_SpaceOuter,  TRUE,
                     LAYOUT_DeferLayout, TRUE,
-                    GA_Disabled,        0 ==((um->toolCapabilities)&FLAG(BTN_TOOL_PEN)),
+                    GA_Disabled,        !(HAS_FLAG(um->toolCapabilities,BTN_TOOL_PEN)),
 
                     LAYOUT_AddChild, um->gadgets[GID_TOUCH] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_TOUCH,
@@ -584,7 +606,7 @@ Object *CreateWindow(struct usbtablet *um)
                     LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
                     LAYOUT_SpaceOuter,  TRUE,
                     LAYOUT_DeferLayout, TRUE,
-                    GA_Disabled,        0 ==((um->toolCapabilities)&FLAG(BTN_TOOL_MOUSE)),
+                    GA_Disabled,        !(HAS_FLAG(um->toolCapabilities,BTN_TOOL_MOUSE)),
 
                     LAYOUT_AddChild, um->gadgets[GID_LEFT] = (struct Gadget *)um->IIntuition->NewObject(um->ChooserClassPtr,NULL,
                         GA_ID,               GID_LEFT,
@@ -659,7 +681,7 @@ Object *CreateWindow(struct usbtablet *um)
                                 CHOOSER_LabelArray,  buttonActionLabels,                                                                     \
                                 CHOOSER_Selected,    um->buttonAction[BTN_0+i].ba_action,                                                    \
                                 GA_Underscore,       0,                                                                                      \
-                                GA_Disabled,         (0 ==((um->buttonCapabilities)&FLAG(BTN_0+i))?TRUE:FALSE),                              \
+                                GA_Disabled,         !(HAS_FLAG(um->buttonCapabilities, (BTN_0 + i))),                                            \
                                 TAG_END),                                                                                                    \
                             CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,                                                    \
                                 LABEL_Text, GetString(&um->localeInfo, MSG_1ST_BUTTON_ACTION+i),                                             \

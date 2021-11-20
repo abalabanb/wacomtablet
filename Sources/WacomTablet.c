@@ -58,6 +58,8 @@
  *                               during this phase
  *                      - Fixed: spurious additional mouse event was sent implying
  *                               unexpected mouse pointer jumps
+ *                      - Fixed: deactivate clicktab in prefs depending on tablet
+ *                               tool capabilities
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1167,7 +1169,7 @@ uint32 HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonActi
     uint8 bit = 0;
     for(; bit < 32; bit++)
     {
-        if((buttons & FLAG(bit)) && !(ut->PrevButtons & FLAG(bit)))
+        if(HAS_FLAG(buttons,bit) && !HAS_FLAG(ut->PrevButtons,bit))
         {
             switch(buttonAction[bit].ba_action)
             {
@@ -1293,24 +1295,24 @@ uint32 GetMouseButtons(struct usbtablet *um, struct ButtonAction buttonAction[],
     
     for(; bit < 32; bit++)
     {
-        if(buttons & FLAG(bit)) {
+        if(HAS_FLAG(buttons, bit)) {
             DebugLog(10, um, "Button set detected for bit %d\n", bit);  
             switch(buttonAction[bit].ba_action)
             {
                 case ACTION_CLIC: 
-                    SETBITS(result, BTN_LEFT, buttons & FLAG(bit));
+                    SETBITS(result, BTN_LEFT, 1);
                     break;
                 case ACTION_MIDDLE_CLIC:
-                    SETBITS(result, BTN_MIDDLE, buttons & FLAG(bit));                
+                    SETBITS(result, BTN_MIDDLE, 1);
                      break;
                 case ACTION_RIGHT_CLIC:
-                    SETBITS(result, BTN_RIGHT, buttons & FLAG(bit));                
+                    SETBITS(result, BTN_RIGHT, 1);
                     break;
                 case ACTION_4TH_CLIC:
-                    SETBITS(result, BTN_SIDE, buttons & FLAG(bit));                
+                    SETBITS(result, BTN_SIDE, 1);
                     break;
                 case ACTION_5TH_CLIC:
-                    SETBITS(result, BTN_EXTRA, buttons & FLAG(bit));                
+                    SETBITS(result, BTN_EXTRA, 1);
                     break;
                 default:
                     break;
@@ -1345,14 +1347,14 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
 
         /* Check Left Button */
 
-        tmp1 = But1 & FLAG(BTN_LEFT);
+        tmp1 = HAS_FLAG(But1,BTN_LEFT);
 
         if ( tmp1 )
         {
             qual |= IEQUALIFIER_LEFTBUTTON;
         }
 
-        tmp2 = um->Buttons & FLAG(BTN_LEFT);
+        tmp2 = HAS_FLAG(um->Buttons,BTN_LEFT);
 
         if ( tmp1 != tmp2 )
         {
@@ -1374,20 +1376,20 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
         int32 nFlag = 0;
         if(!um->SwitchButtons)
         {
-            nFlag = FLAG(BTN_RIGHT);
+            nFlag = BTN_RIGHT;
         }
         else
         {
-            nFlag = FLAG(BTN_MIDDLE);
+            nFlag = BTN_MIDDLE;
         }
 
-        tmp1 = But1 & nFlag;
+        tmp1 = HAS_FLAG(But1,nFlag);
         if ( tmp1 )
         {
             qual |= IEQUALIFIER_RBUTTON;
         }
 
-        tmp2 = um->Buttons & nFlag;
+        tmp2 = HAS_FLAG(um->Buttons,nFlag);
         if ( tmp1 != tmp2 )
         {
             if ( tmp1 )
@@ -1405,20 +1407,20 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
         /* Check Middle Button */
         if(!um->SwitchButtons)
         {
-            nFlag = FLAG(BTN_MIDDLE);
+            nFlag = BTN_MIDDLE;
         }
         else
         {
-            nFlag = FLAG(BTN_RIGHT);
+            nFlag = BTN_RIGHT;
         }
 
-        tmp1 = But1 & nFlag;
+        tmp1 = HAS_FLAG(But1,nFlag);
         if ( tmp1 )
         {
             qual |= IEQUALIFIER_MIDBUTTON;
         }
 
-        tmp2 = um->Buttons & nFlag;
+        tmp2 = HAS_FLAG(um->Buttons, nFlag);
         if ( tmp1 != tmp2 )
         {
             if ( tmp1 )
@@ -1434,10 +1436,10 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
         }
 
         /* Check for 4th button */
-        nFlag = FLAG(BTN_SIDE);
+        nFlag = BTN_SIDE;
 
-        tmp1 = But1 & nFlag;
-        tmp2 = um->Buttons & nFlag;
+        tmp1 = HAS_FLAG(But1, nFlag);
+        tmp2 = HAS_FLAG(um->Buttons, nFlag);
         if ( tmp1 != tmp2 )
         {
             if ( tmp1 )
@@ -1453,10 +1455,10 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
         }
 
         /* Check for 5th button */
-        nFlag = FLAG(BTN_EXTRA);
+        nFlag = BTN_EXTRA;
 
-        tmp1 = But1 & nFlag;
-        tmp2 = um->Buttons & nFlag;
+        tmp1 = HAS_FLAG(But1, nFlag);
+        tmp2 = HAS_FLAG(um->Buttons, nFlag);
         if ( tmp1 != tmp2 )
         {
             if ( tmp1 )

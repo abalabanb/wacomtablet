@@ -42,6 +42,7 @@
 #include <proto/slider.h>
 #include <proto/locale.h>
 #include <proto/application.h>
+#include <proto/clicktab.h>
 
 #include <intuition/intuition.h>
 #include <stdarg.h>
@@ -89,7 +90,7 @@
 
 //// Bit handling macros
 #define SETBITS(var,bit,value) if (value) var|=(((typeof(var))1)<<bit); else var&=~(((typeof(var))1)<<bit);
-#define FLAG(bit) (1L<<(bit)) 
+#define HAS_FLAG(var,bit) (0 != (var & (((typeof(var))1)<<bit)))
 ////
 
 #define LIBPRI          -46
@@ -621,6 +622,7 @@ struct usbtablet {
     Class *                 StringClassPtr;
 
     struct ClassLibrary *   ClickTabClassLib;
+    struct ClickTabIFace *  IClickTab;
     Class *                 ClickTabClassPtr;
 
     struct ClassLibrary *   ChooserClassLib;
