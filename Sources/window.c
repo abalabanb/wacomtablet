@@ -1075,7 +1075,7 @@ void SaveValues(struct usbtablet *um)
     pObj = um->IPrefsObjects->PrefsArray(NULL, NULL, ALPO_Alloc, 0, TAG_DONE);
     
     int nIndex = 0;
-    for(nIndex = 0; nIndex < 32; nIndex++)
+    for(nIndex = 0; nIndex < BUTTON_ACTION_SIZE; nIndex++)
     {
        PrefsObject *pSubDict = um->IPrefsObjects->PrefsDictionary(NULL, NULL, ALPO_Alloc, 0, TAG_DONE);
        

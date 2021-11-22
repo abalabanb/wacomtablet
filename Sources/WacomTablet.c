@@ -60,6 +60,8 @@
  *                               unexpected mouse pointer jumps
  *                      - Fixed: deactivate clicktab in prefs depending on tablet
  *                               tool capabilities
+ *                      - Fixed: button switching was inverting MIDDLE and RIGHT
+ *                      - Fixed: correctly handle whole buttonAction not first 32
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1160,14 +1162,14 @@ static int32  MaxY = 0;
 
 #define max(a,b) ((a) > (b) ? (a) : (b))
 
-uint32 HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint32 buttons)
+uint32 HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint64 buttons)
 {
     DebugLog(10, ut, "HandleExecuteActions in, buttons #%08x prevbuttons #%08x\n", buttons, ut->PrevButtons);
     // do not do anything if there was no change in buttons state
     if(buttons == ut->PrevButtons) return 0;
 
     uint8 bit = 0;
-    for(; bit < 32; bit++)
+    for(; bit < BUTTON_ACTION_SIZE; bit++)
     {
         if(HAS_FLAG(buttons,bit) && !HAS_FLAG(ut->PrevButtons,bit))
         {
@@ -1288,12 +1290,12 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
     return 0;
 }
 
-uint32 GetMouseButtons(struct usbtablet *um, struct ButtonAction buttonAction[], uint32 buttons)
+uint64 GetMouseButtons(struct usbtablet *um, struct ButtonAction buttonAction[], uint64 buttons)
 {
-    uint32 result = 0;
+    uint64 result = 0;
     uint8 bit = 0;
     
-    for(; bit < 32; bit++)
+    for(; bit < BUTTON_ACTION_SIZE; bit++)
     {
         if(HAS_FLAG(buttons, bit)) {
             DebugLog(10, um, "Button set detected for bit %d\n", bit);  
@@ -1340,22 +1342,24 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
 
     if ( But1 != um->Buttons )
     {
-        DebugLog(15, um, "SendMouseEvent: button state change detected: #%08x (new) vs #%08x (old)\n", But1, um->Buttons );
+        DebugLog(15, um, "SendMouseEvent: button state change detected: #%08x (new) vs #%016llx (old)\n", But1, um->Buttons );
 
         code = IECODE_NOBUTTON;
         qual = IEQUALIFIER_RELATIVEMOUSE;
 
         /* Check Left Button */
+        int32 nFlag = (!um->SwitchButtons)?BTN_LEFT:BTN_RIGHT;
 
-        tmp1 = HAS_FLAG(But1,BTN_LEFT);
-
+        tmp1 = HAS_FLAG(But1,nFlag);
         if ( tmp1 )
         {
-            qual |= IEQUALIFIER_LEFTBUTTON;
+            if(!um->SwitchButtons)
+            {
+                qual |= IEQUALIFIER_LEFTBUTTON;
+            }
         }
 
-        tmp2 = HAS_FLAG(um->Buttons,BTN_LEFT);
-
+        tmp2 = HAS_FLAG(um->Buttons,nFlag);
         if ( tmp1 != tmp2 )
         {
             if ( tmp1 )
@@ -1373,15 +1377,7 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
         }
 
         /* Check Right Button */
-        int32 nFlag = 0;
-        if(!um->SwitchButtons)
-        {
-            nFlag = BTN_RIGHT;
-        }
-        else
-        {
-            nFlag = BTN_MIDDLE;
-        }
+        nFlag = (!um->SwitchButtons)?BTN_RIGHT:BTN_LEFT;
 
         tmp1 = HAS_FLAG(But1,nFlag);
         if ( tmp1 )
@@ -1405,14 +1401,7 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
         }
 
         /* Check Middle Button */
-        if(!um->SwitchButtons)
-        {
-            nFlag = BTN_MIDDLE;
-        }
-        else
-        {
-            nFlag = BTN_RIGHT;
-        }
+        nFlag = BTN_MIDDLE;
 
         tmp1 = HAS_FLAG(But1,nFlag);
         if ( tmp1 )

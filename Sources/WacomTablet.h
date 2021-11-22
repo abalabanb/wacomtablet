@@ -357,6 +357,9 @@ enum {
 
 /* Wacom BTN type */
 enum {
+    BUTTON_ACTION_SIZE      = 64,
+    // add below, any new value cannot exceed BUTTON_ACTION_SIZE
+
     BTN_STYLUS3             = 37,
     SW_MUTE_DEVICE          = 36,
     KEY_INFO                = 35,
@@ -651,7 +654,7 @@ struct usbtablet {
     int32                   minTiltX, maxTiltX, fuzzTiltX;
     int32                   minTiltY, maxTiltY, fuzzTiltY;
 
-    struct ButtonAction     buttonAction[64];
+    struct ButtonAction     buttonAction[BUTTON_ACTION_SIZE];
     UWORD                   Curve[7];
 
     uint8                   debugLevel;
@@ -725,7 +728,7 @@ uint32                  SendWheelEvent(struct usbtablet *um, int32 horizWheel, i
 uint32                  SendMouseEvent(struct usbtablet *um, uint32 buttons);
 uint32                  SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons);
 uint32                  SendRawKeyEvent(struct usbtablet *um, uint32 buttons);
-uint32                  HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint32 buttons);
+uint32                  HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint64 buttons);
 
 void                    WacomSetupCapabilities(struct usbtablet *um);
 CONST_STRPTR            GetString(struct LocaleInfo *li, LONG stringNum);
