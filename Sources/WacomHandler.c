@@ -35,6 +35,12 @@
 /// Other useful macros
 #define LE_INT16(a) ((int16)((((uint16)a)>>8)|(((uint16)a)<<8)))
 #define BE_INT16(a) (a)
+#define LE_INT32(a) ((uint32)((((uint32)a)&0xFF000000)>>24)|((((uint32)a)&0xFF0000)>>8)|((((uint32)a)&0xFF00)<<8)|((((uint32)a)&0xFF)<<24))
+#define LE_INT64(a) (((uint64)((((uint64)a) >> 56) | ((((uint64)a) >> 40) & 0xff00) |                   \
+                                ((((uint64)a) >> 24) & 0xff0000) | ((((uint64)a) >> 8) & 0xff000000) |  \
+                                ((((uint64)a) << 8) & ((uint64)0xff << 32)) |                           \
+                                ((((uint64)a) << 24) & ((uint64)0xff << 40)) |                          \
+                                ((((uint64)a) << 40) & ((uint64)0xff << 48)) | ((((uint64)a) << 56)))))
 ///
 
 static void wacom_report_numbered_buttons(/*struct input_dev *input_dev,*/
@@ -102,6 +108,8 @@ static unsigned long int_sqrt(unsigned long x)
 #define WACOM_QUIRK_NO_INPUT        0x0002
 #define WACOM_QUIRK_MONITOR         0x0004
 #define WACOM_QUIRK_BATTERY         0x0008
+
+#define WACOM_INTUOSP2_RING_UNTOUCHED   0x7f
 
 /*
  * Scale factor relating reported contact size to logical contact area.
@@ -1851,6 +1859,270 @@ static void WacomHandler_intuos(struct usbtablet *wacom)
 }
 ////
 
+/// Handler mspro
+
+static void wacom_mspro_touch_switch(struct usbtablet *wacom, BOOL enable_touch)
+{
+    //if (!wacom->touch_input)
+    //    return;
+
+    wacom->is_touch_on = enable_touch;
+    //input_report_switch(wacom->shared->touch_input,
+    //            SW_MUTE_DEVICE, !enable_touch);
+    //input_sync(wacom->shared->touch_input);
+    DebugLog(10, wacom, "wacom_mspro_touch_switch: switching touch not supported yet!\n");
+}
+
+static void wacom_mspro_touch_toggle(struct usbtablet *wacom)
+{
+    //if (!wacom->touch_input)
+    //    return;
+
+    wacom_mspro_touch_switch(wacom, !wacom->is_touch_on);
+}
+
+int wacom_mask_with_numbered_buttons(int nbuttons, int buttons)
+{
+    int mask = 0;
+    int i;
+
+    for (i = 0; i < nbuttons; i++)
+        mask |= buttons & (1 << i);
+
+    return mask;
+}
+
+static int wacom_mspro_pad_irq(struct usbtablet *wacom, uint64 *pButtons, uint32 *toolIdx)
+{
+    struct wacom_features *features = wacom->features;
+    unsigned char *data = wacom->UsbData;
+    //struct input_dev *input = wacom->input;
+    int nbuttons = features->numbered_buttons;
+    BOOL prox;
+    int buttons, ring, ringvalue, keys;
+    BOOL active = FALSE;
+
+    switch (nbuttons) {
+        case 11:
+            buttons = (data[1] >> 1) | (data[3] << 6);
+            ring = LE_INT16(*((uint16 *)&data[4]));
+            keys = 0;
+            break;
+        case 13:
+            buttons = data[1] | (data[3] << 8);
+            ring = LE_INT16(*((uint16 *)&data[4]));
+            keys = 0;
+            break;
+        case 4:
+            buttons = data[1];
+            keys = 0;
+            ring = 0;
+            break;
+        case 9:
+            buttons = (data[1]) | (data[3] << 8);
+            ring = LE_INT16(*((uint16 *)&data[4]));
+            keys = 0;
+            break;
+        case 7:
+            buttons = (data[1]) | (data[3] << 6);
+            ring = LE_INT16(*((uint16 *)&data[4]));
+            keys = 0;
+            break;
+        case 0:
+            buttons = 0;
+            ring = WACOM_INTUOSP2_RING_UNTOUCHED; /* No ring */
+            keys = data[1] & 0x0E; /* 0x01 shouldn't make the pad active */
+
+            if (data[1] & 0x01)
+                wacom_mspro_touch_toggle(wacom);
+
+            SETBITS(*pButtons, KEY_CONTROLPANEL, (data[1] & 0x02) != 0);
+            SETBITS(*pButtons, KEY_ONSCREEN_KEYBOARD, (data[1] & 0x04) != 0);
+            SETBITS(*pButtons, KEY_BUTTONCONFIG, (data[1] & 0x08) != 0);
+            break;
+        default:
+            DebugLog(10, wacom, "%s: unsupported device #%d\n", __func__, data[0]);
+            return 0;
+    }
+
+    /* Fix touchring data: userspace expects 0 at left and increasing clockwise */
+    if (features->oPid == 0x357 || features->oPid == 0x358) {
+        /* 2nd-gen Intuos Pro */
+        ringvalue = 71 - (ring & 0x7F);
+        ringvalue += 3*72/16;
+        if (ringvalue > 71)
+            ringvalue -= 72;
+    } else if (features->oPid == 0x34d || features->oPid == 0x34e ||
+         features->oPid == 0x398 || features->oPid == 0x399) {
+        /* MobileStudio Pro */
+        ringvalue = 35 - (ring & 0x7F);
+        ringvalue += 36/2;
+        if (ringvalue > 35)
+            ringvalue -= 36;
+    }
+    else {
+        /* "Standard" devices */
+        ringvalue = 71 - (ring & 0x7F);
+        ringvalue += 72/4;
+        if (ringvalue > 71)
+            ringvalue -= 72;
+    }
+
+    /* Mask off buttons greater than nbuttons to avoid having them set prox */
+    buttons = wacom_mask_with_numbered_buttons(nbuttons, buttons);
+
+    if (ring != WACOM_INTUOSP2_RING_UNTOUCHED)
+        prox = buttons || ring;
+    else
+        prox = buttons;
+
+    wacom_report_numbered_buttons(/*input,*/ nbuttons, buttons, pButtons);
+    const int32 vWheel = (ring & 0x80) ? ringvalue : 0;
+    SendWheelEvent(wacom, 0, vWheel, FALSE);
+
+    //input_report_key(input, wacom->tool[1], prox ? 1 : 0);
+
+    active = (ring ^ wacom->previous_ring) || (buttons ^ wacom->previous_buttons) || (keys ^ wacom->previous_keys);
+
+    //input_report_abs(input, ABS_MISC, prox ? PAD_DEVICE_ID : 0);
+
+    wacom->previous_buttons = buttons;
+    wacom->previous_ring = ring;
+    wacom->previous_keys = keys;
+
+    if (active)
+        ;// input_event(input, EV_MSC, MSC_SERIAL, 0xffffffff);
+    else
+        return 0;
+
+    return 1;
+}
+
+static int wacom_mspro_pen_irq(struct usbtablet *wacom, uint64 *pButtons, uint32 *toolIdx)
+{
+    UBYTE *data = wacom->UsbData;
+    //struct input_dev *input = wacom->input;
+    BOOL tip, sw1, sw2, range, proximity;
+    unsigned int x, y;
+    unsigned int pressure;
+    int tilt_x, tilt_y;
+    int rotation;
+    unsigned int fingerwheel;
+    unsigned int height;
+    uint64 tool_uid;
+    unsigned int tool_type;
+
+    if (delay_pen_events(wacom))
+        return 1;
+
+    tip         = data[1] & 0x01;
+    sw1         = data[1] & 0x02;
+    sw2         = data[1] & 0x04;
+    /* eraser   = data[1] & 0x08; */
+    /* invert   = data[1] & 0x10; */
+    range       = data[1] & 0x20;
+    proximity   = data[1] & 0x40;
+    x           = LE_INT32(*((int32*)&data[2])) & 0xFFFFFF;
+    y           = LE_INT32(*((int32 *)&data[5])) & 0xFFFFFF;
+    pressure    = LE_INT16(*((int16 *)&data[8]));
+    tilt_x      = (char)data[10];
+    tilt_y      = (char)data[11];
+    rotation    = (int16)LE_INT16(*((int16*)&data[12]));
+    fingerwheel = LE_INT16(*((int16 *)&data[14]));
+    height      = data[16];
+    tool_uid    = LE_INT64(*((int64 *)&data[17]));
+    tool_type   = LE_INT16(*((int16 *)&data[25]));
+
+    if (range) {
+        //wacom->serial[0] = (tool_uid & 0xFFFFFFFF);
+        wacom->id[0]     = ((tool_uid >> 32) & 0xFFFFF) | tool_type;
+        wacom->tool[0] = wacom_intuos_get_tool_type(wacom->id[0] & 0xFFFFF);
+    }
+
+    /* pointer going from fully "in range" to merely "in proximity" */
+    if (!range && wacom->tool[0]) {
+        height = wacom->features->distance_max;
+    }
+
+    /*
+     * only report data if there's a tool for userspace to associate
+     * the events with.
+     */
+    if (wacom->tool[0]) {
+        unsigned int sw_state = sw1 | (sw2 << 1);
+        struct WacomState *state = &wacom->currentState;
+
+        /* Fix rotation alignment: userspace expects zero at left */
+        rotation += 1800/4;
+        if (rotation > 899)
+            rotation -= 1800;
+
+        /* Fix tilt zero-point: wacom_setup_cintiq declares 0..127, not -63..+64 */
+        tilt_x += 64;
+        tilt_y += 64;
+
+        SETBITS(*pButtons, BTN_TOUCH,    proximity ? tip           : 0);
+        SETBITS(*pButtons, BTN_STYLUS,   proximity ? sw_state == 1 : 0);
+        SETBITS(*pButtons, BTN_STYLUS2,  proximity ? sw_state == 2 : 0);
+        SETBITS(*pButtons, BTN_STYLUS3,  proximity ? sw_state == 3 : 0);
+        state->X =                     ( proximity ? x             : 0);
+        state->Y =                     ( proximity ? y             : 0);
+        state->Pressure =              ( proximity ? pressure      : 0);
+        state->tiltX =                 ( proximity ? tilt_x        : 0);
+        state->tiltY =                 ( proximity ? tilt_y        : 0);
+        state->Z =                     ( proximity ? rotation      : 0);
+        const int32 vWheel =           ( proximity ? fingerwheel   : 0);
+        SendWheelEvent(wacom, 0, vWheel, FALSE);
+        state->distance[0] =           ( proximity ? height        : 0);
+
+        //input_event(input, EV_MSC, MSC_SERIAL, wacom->serial[0]);
+        //input_report_abs(input, ABS_MISC, proximity ? wacom_intuos_id_mangle(wacom->id[0]) : 0);
+        state->proximity[0] =          ( proximity ? 1 : 0);
+
+        if (!proximity)
+            wacom->tool[0] = 0;
+    }
+
+    wacom->stylus_in_proximity = proximity;
+
+    return 1;
+}
+
+static void WacomHandler_mspro(struct usbtablet *wacom)
+{
+    UBYTE *data = wacom->UsbData;
+    uint64 buttons = 0;
+    uint32 toolIdx = 0;
+    int result = 0;
+    //struct input_dev *input = wacom->input;
+
+    switch (data[0]) {
+        case WACOM_REPORT_MSPRO:
+            result = wacom_mspro_pen_irq(wacom, &buttons, &toolIdx);
+            break;
+        case WACOM_REPORT_MSPROPAD:
+            result = wacom_mspro_pad_irq(wacom, &buttons, &toolIdx);
+            break;
+        case WACOM_REPORT_MSPRODEVICE:
+            // result = wacom_mspro_device_irq(wacom);
+            DebugLog(10, wacom, "%s: received unsupported report #%d\n", __func__, data[0]);
+            break;
+        default:
+            DebugLog(10, wacom, "%s: received unknown report #%d\n", __func__, data[0]);
+            break;
+    }
+
+    if(result)
+    {
+        SendTabletEvent(0, wacom, buttons);
+        SendMouseEvent(wacom, buttons);
+        HandleExecuteActions(wacom, wacom->buttonAction, buttons);
+    }
+
+    //return 0;
+}
+///
+
 static int wacom_numbered_button_to_key(int n)
 {
     if (n < 10)
@@ -2044,8 +2316,12 @@ VOID WacomHandler( struct usbtablet *um )
                         WacomHandler_bpt(um, req->io_Actual);
                     break;
 
+                case INTUOSHT3:
+                    WacomHandler_mspro(um);
+                    break;
+
                 default:
-                    DebugLog(0, um, "WacomHandler: unsupported tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                    DebugLog(0, um, "WacomHandler: unsupported unknown tablet type %ld, '%s'\n", um->features->type, um->features->name);
                     break;
             }
         }

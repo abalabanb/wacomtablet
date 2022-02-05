@@ -293,14 +293,13 @@ enum {
     WACOM_REPORT_TPCST              = 16,
 */
     WACOM_REPORT_CINTIQ             = 16,
-//    WACOM_REPORT_MSPRO              = 16,
+    WACOM_REPORT_MSPRO              = 16,
     WACOM_REPORT_INTUOS_PEN         = 16,
     WACOM_REPORT_CINTIQPAD          = 17,
     WACOM_REPORT_DTUS               = 17,
-/*    WACOM_REPORT_MSPROPAD           = 17,
-    WACOM_REPORT_TPC1FGE            = 18,
+    WACOM_REPORT_MSPROPAD           = 17,
+//    WACOM_REPORT_TPC1FGE            = 18,
     WACOM_REPORT_MSPRODEVICE        = 19,
-*/
     WACOM_REPORT_DTK2451PAD         = 21,
 /*
     WACOM_REPORT_24HDT              = 1,
@@ -667,9 +666,13 @@ struct usbtablet {
     uint32                  id[2];
     BOOL                    reporting_data;
     int*                    slots;
+    int                     previous_buttons;
+    int                     previous_ring;
+    int                     previous_keys;
     // From wacom_shared
     BOOL                    touch_down;
     BOOL                    stylus_in_proximity;
+    BOOL                    is_touch_on;
     // Temporary
     BOOL                    inputPropDirect;
     BOOL                    holdClick; // switched by ACTION_HOLD_CLIC
