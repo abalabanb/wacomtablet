@@ -62,6 +62,7 @@
  *                               tool capabilities
  *                      - Fixed: button switching was inverting MIDDLE and RIGHT
  *                      - Fixed: correctly handle whole buttonAction not first 32
+ *                      - Added: support for mspro-like tablets
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)

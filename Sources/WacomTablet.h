@@ -430,6 +430,18 @@ struct wacom_features {
     int oPid;
 };
 
+struct wacom_battery {
+    //struct power_supply battery;
+    //struct power_supply ac;
+    //char bat_name[WACOM_NAME_MAX];
+    //char ac_name[WACOM_NAME_MAX];
+    int bat_status;
+    int battery_capacity;
+    int bat_charging;
+    int bat_connected;
+    int ps_connected;
+};
+
 struct wacom_device {
     uint16    idVendor;
     uint16    idDevice;
@@ -673,6 +685,8 @@ struct usbtablet {
     BOOL                    touch_down;
     BOOL                    stylus_in_proximity;
     BOOL                    is_touch_on;
+    // From wacom structure
+    struct wacom_battery    battery;
     // Temporary
     BOOL                    inputPropDirect;
     BOOL                    holdClick; // switched by ACTION_HOLD_CLIC

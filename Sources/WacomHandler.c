@@ -110,6 +110,7 @@ static unsigned long int_sqrt(unsigned long x)
 #define WACOM_QUIRK_BATTERY         0x0008
 
 #define WACOM_INTUOSP2_RING_UNTOUCHED   0x7f
+#define WACOM_POWER_SUPPLY_STATUS_AUTO  -1
 
 /*
  * Scale factor relating reported contact size to logical contact area.
@@ -1881,6 +1882,66 @@ static void wacom_mspro_touch_toggle(struct usbtablet *wacom)
     wacom_mspro_touch_switch(wacom, !wacom->is_touch_on);
 }
 
+static void __wacom_notify_battery(struct wacom_battery *battery,
+                   int bat_status, int bat_capacity,
+                   BOOL bat_charging, BOOL bat_connected,
+                   BOOL ps_connected)
+{
+    BOOL changed = battery->bat_status       != bat_status    ||
+               battery->battery_capacity != bat_capacity  ||
+               battery->bat_charging     != bat_charging  ||
+               battery->bat_connected    != bat_connected ||
+               battery->ps_connected     != ps_connected;
+
+    if (changed) {
+        battery->bat_status = bat_status;
+        battery->battery_capacity = bat_capacity;
+        battery->bat_charging = bat_charging;
+        battery->bat_connected = bat_connected;
+        battery->ps_connected = ps_connected;
+
+        // ABA consider need for notifying GUI
+        //if (battery->battery.dev)
+        //    power_supply_changed(&battery->battery);
+    }
+}
+
+static void wacom_notify_battery(struct usbtablet *wacom_wac,
+    int bat_status, int bat_capacity, BOOL bat_charging,
+    BOOL bat_connected, BOOL ps_connected)
+{
+    //struct wacom *wacom = container_of(wacom_wac, struct wacom, wacom_wac);
+
+    __wacom_notify_battery(&wacom_wac->battery, bat_status, bat_capacity,
+                   bat_charging, bat_connected, ps_connected);
+}
+
+static int wacom_mspro_device_irq(struct usbtablet *wacom)
+{
+    //struct wacom *w = container_of(wacom, struct wacom, wacom_wac);
+    //struct wacom_features *features = wacom->features;
+    unsigned char *data = wacom->UsbData;
+    BOOL bat_charging;
+    int battery_level;
+
+    battery_level = data[1] & 0x7F;
+    bat_charging = data[1] & 0x80;
+
+    //ABA: following lines are only to handle battery psy driver falldown/reinit
+    //if (!w->battery.battery.dev &&
+    //    !(features->quirks & WACOM_QUIRK_BATTERY)) {
+    //    features->quirks |= WACOM_QUIRK_BATTERY;
+    //    wacom_schedule_work(wacom, WACOM_WORKER_BATTERY);
+    //}
+
+    wacom_notify_battery(wacom, WACOM_POWER_SUPPLY_STATUS_AUTO,
+                 battery_level, bat_charging, 1, bat_charging);
+
+    wacom_mspro_touch_switch(wacom, (data[2] & 0x80));
+
+    return 0;
+}
+
 int wacom_mask_with_numbered_buttons(int nbuttons, int buttons)
 {
     int mask = 0;
@@ -2104,8 +2165,7 @@ static void WacomHandler_mspro(struct usbtablet *wacom)
             result = wacom_mspro_pad_irq(wacom, &buttons, &toolIdx);
             break;
         case WACOM_REPORT_MSPRODEVICE:
-            // result = wacom_mspro_device_irq(wacom);
-            DebugLog(10, wacom, "%s: received unsupported report #%d\n", __func__, data[0]);
+            result = wacom_mspro_device_irq(wacom);
             break;
         default:
             DebugLog(10, wacom, "%s: received unknown report #%d\n", __func__, data[0]);
