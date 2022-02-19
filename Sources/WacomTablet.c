@@ -1250,7 +1250,7 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
                 vWheel = (vWheel > 0) ? 20 : -20;
             }
         }
-        um->prevState.wheel[1] = vertWheelData;
+        um->currentState.wheel[1] = vertWheelData;
         if(!horizWheelData)
         {
             hWheel = 0;   
@@ -1263,12 +1263,14 @@ uint32 SendWheelEvent(struct usbtablet *um, int32 horizWheelData, int32 vertWhee
                 hWheel = (hWheel > 0)? 20 : -20;
             }
         }
-        um->prevState.wheel[0] = horizWheelData;
+        um->currentState.wheel[0] = horizWheelData;
     }
     else
     {
         vWheel = vertWheelData;
         hWheel = horizWheelData;
+        um->currentState.wheel[0] = horizWheelData;
+        um->currentState.wheel[1] = vertWheelData;
     }
     
     if(hWheel | vWheel)
