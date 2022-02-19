@@ -300,7 +300,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
             SETBITS(um->buttonCapabilities, KEY_ONSCREEN_KEYBOARD, 1);
             SETBITS(um->buttonCapabilities, KEY_BUTTONCONFIG, 1);
 
-            //wacom_wac->previous_ring = WACOM_INTUOSP2_RING_UNTOUCHED;
+            um->previous_ring = WACOM_INTUOSP2_RING_UNTOUCHED;
         }
 
         WacomSetupCintiq(um);
@@ -389,7 +389,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
     case INTUOSP2S:
         if (features->device_type == BTN_TOOL_PEN) {
             SETBITS(um->buttonCapabilities, BTN_STYLUS3, 1);
-            //wacom_wac->previous_ring = WACOM_INTUOSP2_RING_UNTOUCHED;
+            um->previous_ring = WACOM_INTUOSP2_RING_UNTOUCHED;
         }
         else {
             //input_dev->evbit[0] |= BIT_MASK(EV_SW);
@@ -2333,8 +2333,7 @@ VOID WacomHandler( struct usbtablet *um )
                     }
                     else
                     {
-                        //sync = wacom_mspro_irq(um);
-                        DebugLog(0, um, "WacomHandler: unsupported tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                        WacomHandler_mspro(um);
                     }
                     break;
 
