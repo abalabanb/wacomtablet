@@ -63,6 +63,7 @@
  *                      - Fixed: button switching was inverting MIDDLE and RIGHT
  *                      - Fixed: correctly handle whole buttonAction not first 32
  *                      - Added: support for mspro-like tablets
+ *                      - Fixed: incorrect curve usage during pression conversion
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -1616,8 +1617,7 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             }
             um->IENT_Tags[0].ti_Tag = TABLETA_Pressure;
             // normalize to fill signed long integer range
-            //um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->currentState.Pressure) * 0xffffffff / um->RangeP ) - 0x80000000;
-            um->IENT_Tags[0].ti_Data = (ConvertPressure(um, um->currentState.Pressure) * 0x7fffffff / um->RangeP );
+            um->IENT_Tags[0].ti_Data = ConvertPressure(um, um->currentState.Pressure) * ( 0x7fffffff / um->RangeP ) - 0x80000000;
             // identify tool
             um->IENT_Tags[1].ti_Tag = TABLETA_Tool;
             um->IENT_Tags[1].ti_Data = um->tool[toolIdx];
@@ -1756,10 +1756,10 @@ struct USBBusEPDsc *epd;
 
 uint32 ConvertPressure(struct usbtablet *um, uint32 pressure)
 {
-    /* we have 5 sliders we makes 6 ranges */
+    /* we have 7 sliders we makes 6 ranges */
     /* 01 12 23 34 45 56 */
     float r[7] = {0.0,16.0,33.0,50.0,67.0, 83.0, 100.0};
-    float c[7] = {(float)um->Curve[0],(float)um->Curve[1],(float)um->Curve[3],(float)um->Curve[3],(float)um->Curve[4],(float)um->Curve[5],(float)um->Curve[6]};
+    float c[7] = {(float)um->Curve[0],(float)um->Curve[1],(float)um->Curve[2],(float)um->Curve[3],(float)um->Curve[4],(float)um->Curve[5],(float)um->Curve[6]};
     
     
     int range = 0;
@@ -1774,6 +1774,9 @@ uint32 ConvertPressure(struct usbtablet *um, uint32 pressure)
     }
     outpc = c[range -1] + (c[range] - c[range -1]) * (inpc -r[range-1]) /( r[range] - r[range -1]);
     
+    DebugLog(50, um, "ConvertPressure from %ld (%f) to %f (%ld) range %ld\n", pressure, inpc,
+        outpc, (uint32) ((outpc * (float)um->RangeP)/100.0), range);
+
     return (uint32) ((outpc * (float)um->RangeP)/100.0);
 }
 ///
