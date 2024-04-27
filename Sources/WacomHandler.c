@@ -52,22 +52,6 @@ static inline BOOL delay_pen_events(struct usbtablet *wacom);
 static inline BOOL report_touch_events(struct usbtablet *wacom);
 static void WacomHandler_intuos(struct usbtablet *wacom);
 
-static int input_abs_get_res(struct usbtablet* wacom, int param)
-{
-    switch(param)
-    {
-        default:
-            DebugLog(0, wacom, "%s: unknown parameter %d\n", __func__, param);
-            return -1;
-        case ABS_X:
-            return wacom->maxX-wacom->minX;
-            break;
-        case ABS_Y:
-            return wacom->maxY-wacom->minY;
-            break;
-    }
-}
-
 static inline uint16 get_unaligned_be16(const uint8 *p)
 {
     return p[0] << 8 | p[1];
@@ -103,12 +87,6 @@ static unsigned long int_sqrt(unsigned long x)
     return y;
 }
 
-/* device quirks */
-#define WACOM_QUIRK_BBTOUCH_LOWRES  0x0001
-#define WACOM_QUIRK_NO_INPUT        0x0002
-#define WACOM_QUIRK_MONITOR         0x0004
-#define WACOM_QUIRK_BATTERY         0x0008
-
 #define WACOM_INTUOSP2_RING_UNTOUCHED   0x7f
 #define WACOM_POWER_SUPPLY_STATUS_AUTO  -1
 
@@ -118,6 +96,46 @@ static unsigned long int_sqrt(unsigned long x)
  */
 #define WACOM_CONTACT_AREA_SCALE 2607
 
+static void __wacom_notify_battery(struct wacom_battery *battery,
+                   int bat_status, int bat_capacity,
+                   BOOL bat_charging, BOOL bat_connected,
+                   BOOL ps_connected)
+{
+    BOOL changed = battery->bat_status       != bat_status    ||
+               battery->battery_capacity != bat_capacity  ||
+               battery->bat_charging     != bat_charging  ||
+               battery->bat_connected    != bat_connected ||
+               battery->ps_connected     != ps_connected;
+
+    if (changed) {
+        battery->bat_status = bat_status;
+        battery->battery_capacity = bat_capacity;
+        battery->bat_charging = bat_charging;
+        battery->bat_connected = bat_connected;
+        battery->ps_connected = ps_connected;
+
+        // ABA consider need for notifying GUI
+        //if (WACOM_POWERSUPPLY_DEVICE(battery->battery))
+        //    power_supply_changed(WACOM_POWERSUPPLY_REF(battery->battery));
+    }
+}
+
+static void wacom_notify_battery(struct usbtablet *wacom_wac,
+    int bat_status, int bat_capacity, BOOL bat_charging,
+    BOOL bat_connected, BOOL ps_connected)
+{
+    //struct wacom *wacom = container_of(wacom_wac, struct wacom, wacom_wac);
+    struct usbtablet *wacom = wacom_wac;
+    //BOOL bat_initialized = /*WACOM_POWERSUPPLY_DEVICE*/(wacom->battery.battery);
+    //BOOL has_quirk = wacom_wac->features.quirks & WACOM_QUIRK_BATTERY;
+
+    //if (bat_initialized != has_quirk)
+    //    wacom_schedule_work(wacom_wac, WACOM_WORKER_BATTERY);
+
+    __wacom_notify_battery(&wacom->battery, bat_status, bat_capacity,
+                   bat_charging, bat_connected, ps_connected);
+}
+
 static void WacomSetupBasicProPen(struct usbtablet *um)
 {
     //input_set_capability(input_dev, EV_MSC, MSC_SERIAL);
@@ -126,8 +144,8 @@ static void WacomSetupBasicProPen(struct usbtablet *um)
     SETBITS(um->toolCapabilities, BTN_STYLUS, 1);
     SETBITS(um->toolCapabilities, BTN_STYLUS2, 1);
 
-    SetAbsParams(um, ABS_DISTANCE,
-                 0, um->features->distance_max, um->features->distance_fuzz, 0);
+    input_set_abs_params(um, ABS_DISTANCE,
+                 0, um->features.distance_max, um->features.distance_fuzz, 0);
 }
 
 
@@ -140,9 +158,9 @@ static void WacomSetupCintiq(struct usbtablet *um)
     SETBITS(um->toolCapabilities, BTN_TOOL_PENCIL, 1);
     SETBITS(um->toolCapabilities, BTN_TOOL_AIRBRUSH, 1);
 
-    SetAbsParams(um, ABS_WHEEL, 0, 1023, 0, 0);
-    SetAbsParams(um, ABS_TILT_X, 0, 127, um->features->tilt_fuzz, 0);
-    SetAbsParams(um, ABS_TILT_Y, 0, 127, um->features->tilt_fuzz, 0);
+    input_set_abs_params(um, ABS_WHEEL, 0, 1023, 0, 0);
+    input_set_abs_params(um, ABS_TILT_X, 0, 127, um->features.tilt_fuzz, 0);
+    input_set_abs_params(um, ABS_TILT_Y, 0, 127, um->features.tilt_fuzz, 0);
 }
 
 static void WacomSetupIntuos(struct usbtablet *um)
@@ -159,15 +177,30 @@ static void WacomSetupIntuos(struct usbtablet *um)
     SETBITS(um->toolCapabilities, BTN_TOOL_MOUSE, 1);
     SETBITS(um->toolCapabilities, BTN_TOOL_LENS, 1);
 
-    SetAbsParams(um, ABS_RZ, -900, 899, 0, 0);
-    um->minThrottle = -1023;
-    um->maxThrottle = 1023;
+    input_set_abs_params(um, ABS_RZ, -900, 899, 0, 0);
+    input_set_abs_params(um, ABS_THROTTLE, -1023, 1023, 0, 0);
 }
 
-/// Setup device quirks
-void WacomSetupDeviceQuirks(struct usbtablet *um)
+static void wacom_setup_wacom_one_pen(struct usbtablet *wacom_wac)
 {
-    struct wacom_features *features = um->features;
+    struct wacom_features *features = &wacom_wac->features;
+
+    SETBITS(wacom_wac->buttonCapabilities, BTN_TOOL_PEN, 1);
+    SETBITS(wacom_wac->buttonCapabilities, BTN_STYLUS, 1);
+    input_set_abs_params(wacom_wac, ABS_TILT_X, 0, 127,
+                 features->tilt_fuzz, 0);
+    input_set_abs_params(wacom_wac, ABS_TILT_Y, 0, 127,
+                 features->tilt_fuzz, 0);
+    input_set_abs_params(wacom_wac, ABS_DISTANCE,
+                 0, features->distance_max,
+                 features->distance_fuzz, 0);
+}
+
+/// wacom_setup_device_quirks
+void wacom_setup_device_quirks(struct usbtablet *wacom)
+{
+    struct wacom_features *features = &wacom->/*wacom_wac.*/features;
+    struct USBBusEPDsc *endpoint = wacom->UsbEndPointDscrIn;
 
     /* touch device found but size is not defined. use default */
     if (features->device_type == BTN_TOOL_FINGER && !features->x_max) {
@@ -183,7 +216,7 @@ void WacomSetupDeviceQuirks(struct usbtablet *um)
      */
     if ((features->type >= INTUOS5S && features->type <= INTUOSPL) ||
         (features->type >= INTUOSHT && features->type <= BAMBOO_PT)) {
-        if ((LE_WORD(um->UsbEndPointDscrIn->ed_MaxPacketSize) && USBEP_SIZEM_MAXPACKETSIZE) == WACOM_PKGLEN_BBTOUCH3) {
+        if ((LE_WORD(endpoint->ed_MaxPacketSize) & USBEP_SIZEM_MAXPACKETSIZE) == WACOM_PKGLEN_BBTOUCH3) {
             features->device_type = BTN_TOOL_FINGER;
             features->pktlen = WACOM_PKGLEN_BBTOUCH3;
 
@@ -210,15 +243,19 @@ void WacomSetupDeviceQuirks(struct usbtablet *um)
         features->quirks |= WACOM_QUIRK_BBTOUCH_LOWRES;
     }
 
+    if (features->type == REMOTE)
+        features->device_type = BTN_TOOL_FINGER;
+
     if (features->type == WIRELESS) {
 
         /* monitor never has input and pen/touch have delayed create */
         features->quirks |= WACOM_QUIRK_NO_INPUT;
 
         /* must be monitor interface if no device_type set */
-        if (!features->device_type)
+        if (!features->device_type) {
             features->quirks |= WACOM_QUIRK_MONITOR;
             features->quirks |= WACOM_QUIRK_BATTERY;
+        }
     }
 
     if (features->type == REMOTE)
@@ -226,10 +263,54 @@ void WacomSetupDeviceQuirks(struct usbtablet *um)
 }
 ////
 
+///
+static void wacom_abs_set_axis(struct usbtablet *wacom_wac)
+{
+    struct wacom_features *features = &wacom_wac->features;
+
+    if (features->device_type == BTN_TOOL_PEN) {
+        input_set_abs_params(wacom_wac, ABS_X, 0 + features->offset_left,
+                     features->x_max - features->offset_right,
+                     features->x_fuzz, 0);
+        input_set_abs_params(wacom_wac, ABS_Y, 0 + features->offset_top,
+                     features->y_max - features->offset_bottom,
+                     features->y_fuzz, 0);
+        input_set_abs_params(wacom_wac, ABS_PRESSURE, 0,
+            features->pressure_max, features->pressure_fuzz, 0);
+
+        /* penabled devices have fixed resolution for each model */
+        input_abs_set_res(wacom_wac, ABS_X, features->x_resolution);
+        input_abs_set_res(wacom_wac, ABS_Y, features->y_resolution);
+    } else {
+        if (features->touch_max == 1) {
+            input_set_abs_params(wacom_wac, ABS_X, 0,
+                features->x_max, features->x_fuzz, 0);
+            input_set_abs_params(wacom_wac, ABS_Y, 0,
+                features->y_max, features->y_fuzz, 0);
+            input_abs_set_res(wacom_wac, ABS_X,
+                      features->x_resolution);
+            input_abs_set_res(wacom_wac, ABS_Y,
+                      features->y_resolution);
+        }
+
+        if (features->touch_max > 1) {
+            input_set_abs_params(wacom_wac, ABS_MT_POSITION_X, 0,
+                features->x_max, features->x_fuzz, 0);
+            input_set_abs_params(wacom_wac, ABS_MT_POSITION_Y, 0,
+                features->y_max, features->y_fuzz, 0);
+            input_abs_set_res(wacom_wac, ABS_MT_POSITION_X,
+                      features->x_resolution);
+            input_abs_set_res(wacom_wac, ABS_MT_POSITION_Y,
+                      features->y_resolution);
+        }
+    }
+}
+////
+
 /// Setup tablet capabilities
 void WacomSetupCapabilities(struct usbtablet* um)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     int numbered_buttons = features->numbered_buttons;
     int err;
 
@@ -244,28 +325,28 @@ void WacomSetupCapabilities(struct usbtablet* um)
     SETBITS(um->buttonCapabilities, BTN_TOUCH, 1);
 //  __set_bit(ABS_MISC, input_dev->absbit);
 
-//    wacom_abs_set_axis(input_dev, wacom_wac);
+    wacom_abs_set_axis(um);
 
     switch (features->type) {
     case REMOTE:
         /* kept for making legacy xf86-input-wacom accepting the pad */
-        SetAbsParams(um, ABS_X, 0, 1, 0, 0);
-        SetAbsParams(um, ABS_Y, 0, 1, 0, 0);
+        input_set_abs_params(um, ABS_X, 0, 1, 0, 0);
+        input_set_abs_params(um, ABS_Y, 0, 1, 0, 0);
 
         /* kept for making udev and libwacom accepting the pad */
         SETBITS(um->buttonCapabilities, BTN_STYLUS, 1);
         SETBITS(um->buttonCapabilities, BTN_TOUCH, 0);
         //input_set_capability(input_dev, EV_MSC, MSC_SERIAL);
-        SetAbsParams(um, ABS_WHEEL, 0, 71, 0, 0);
+        input_set_abs_params(um, ABS_WHEEL, 0, 71, 0, 0);
         break;
 
     case WACOM_MO:
-        SetAbsParams(um, ABS_WHEEL, 0, 71, 0, 0);
+        input_set_abs_params(um, ABS_WHEEL, 0, 71, 0, 0);
         /* fall through */
 
     case WACOM_G4:
         //input_set_capability(input_dev, EV_MSC, MSC_SERIAL);
-        SetAbsParams(um, ABS_DISTANCE, 0,
+        input_set_abs_params(um, ABS_DISTANCE, 0,
             features->distance_max, features->distance_fuzz, 0);
 
         SETBITS(um->buttonCapabilities, BTN_BACK, 1);
@@ -288,9 +369,15 @@ void WacomSetupCapabilities(struct usbtablet* um)
         // __set_bit(INPUT_PROP_POINTER, input_dev->propbit);
     break;
 
+    case WACOM_ONE:
+        um->inputPropDirect = TRUE;
+        wacom_setup_wacom_one_pen(um);
+        break;
+
     case WACOM_MSPRO:
+    case WACOM_PRO2022:
     case CINTIQ_16:
-        SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+        input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
         SETBITS(um->buttonCapabilities, BTN_STYLUS3, 1);
         um->inputPropDirect = TRUE;
 
@@ -302,6 +389,18 @@ void WacomSetupCapabilities(struct usbtablet* um)
 
             um->previous_ring = WACOM_INTUOSP2_RING_UNTOUCHED;
         }
+
+        // TODO
+        //if (input_dev->id.product == 0x3B2) {
+        //    /* Cintiq Pro 16 refresh */
+        //    wacom_wac->shared->has_mute_touch_switch = true;
+        //}
+        //else if (input_dev->id.product == 0x3B3) {
+        //    /* Cintiq Pro 16 refresh touchscreen */
+        //    input_dev->evbit[0] |= BIT_MASK(EV_SW);
+        //    __set_bit(SW_MUTE_DEVICE, input_dev->swbit);
+        //    wacom_wac->shared->has_mute_touch_switch = true;
+        //}
 
         WacomSetupCintiq(um);
         break;
@@ -317,13 +416,13 @@ void WacomSetupCapabilities(struct usbtablet* um)
         if (!features->oPid)
         {    SETBITS(um->buttonCapabilities, KEY_BUTTONCONFIG, 1); }
 
-        SetAbsParams(um, ABS_THROTTLE, 0, 71, 0, 0);
+        input_set_abs_params(um, ABS_THROTTLE, 0, 71, 0, 0);
         /* fall through */
 
     case WACOM_13HD:
     case CINTIQ_HYBRID:
     case CINTIQ_COMPANION_2:
-        SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+        input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
         /* fall through */
 
     case DTK:
@@ -344,7 +443,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
         {    SETBITS(um->buttonCapabilities, KEY_CONTROLPANEL, 1); }
 
         um->inputPropDirect = TRUE;
-        SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+        input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
 
         WacomSetupCintiq(um);
         break;
@@ -361,9 +460,9 @@ void WacomSetupCapabilities(struct usbtablet* um)
     case WACOM_21UX2:
     case WACOM_BEE:
     case CINTIQ:
-        SetAbsParams(um, ABS_RX, 0, 4096, 0, 0);
-        SetAbsParams(um, ABS_RY, 0, 4096, 0, 0);
-        SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+        input_set_abs_params(um, ABS_RX, 0, 4096, 0, 0);
+        input_set_abs_params(um, ABS_RY, 0, 4096, 0, 0);
+        input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
         um->inputPropDirect = TRUE;
 
         WacomSetupCintiq(um);
@@ -371,12 +470,12 @@ void WacomSetupCapabilities(struct usbtablet* um)
 
     case INTUOS3:
     case INTUOS3L:
-        SetAbsParams(um, ABS_RY, 0, 4096, 0, 0);
+        input_set_abs_params(um, ABS_RY, 0, 4096, 0, 0);
         /* fall through */
 
     case INTUOS3S:
-        SetAbsParams(um, ABS_RX, 0, 4096, 0, 0);
-        SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+        input_set_abs_params(um, ABS_RX, 0, 4096, 0, 0);
+        input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
         /* fall through */
 
     case INTUOS:
@@ -390,17 +489,12 @@ void WacomSetupCapabilities(struct usbtablet* um)
         if (features->device_type == BTN_TOOL_PEN) {
             SETBITS(um->buttonCapabilities, BTN_STYLUS3, 1);
             um->previous_ring = WACOM_INTUOSP2_RING_UNTOUCHED;
+            //wacom_wac->shared->has_mute_touch_switch = true;
         }
         else {
             //input_dev->evbit[0] |= BIT_MASK(EV_SW);
             SETBITS(um->buttonCapabilities, SW_MUTE_DEVICE, 1);
             //wacom_wac->shared->has_mute_touch_switch = true;
-        }
-        err = WacomCreateSlots(um);
-        if (err)
-        {
-            DebugLog(20, um, "WacomSetupCapabilities: Cannot create wacom slots\n");
-            return;
         }
         /* fall through */
 
@@ -413,11 +507,11 @@ void WacomSetupCapabilities(struct usbtablet* um)
         //__set_bit(INPUT_PROP_POINTER, input_dev->propbit);
 
         if (features->device_type == BTN_TOOL_PEN) {
-            SetAbsParams(um, ABS_DISTANCE, 0,
+            input_set_abs_params(um, ABS_DISTANCE, 0,
                           features->distance_max,
                           features->distance_fuzz, 0);
 
-            SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+            input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
 
             WacomSetupIntuos(um);
         } else if (features->device_type == BTN_TOOL_FINGER) {
@@ -425,31 +519,23 @@ void WacomSetupCapabilities(struct usbtablet* um)
 
             /* pad is on pen interface */
             numbered_buttons = 0;
-            SETBITS(um->toolCapabilities, BTN_TOOL_FINGER, 1);
-            SETBITS(um->toolCapabilities, BTN_TOOL_DOUBLETAP, 1);
-            SETBITS(um->toolCapabilities, BTN_TOOL_TRIPLETAP, 1);
-            SETBITS(um->toolCapabilities, BTN_TOOL_QUADTAP, 1);
-
-            //input_mt_init_slots(input_dev, features->touch_max);
-
-            //input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
-            //                     0, features->x_max, 0, 0);
-            //input_set_abs_params(input_dev, ABS_MT_TOUCH_MINOR,
-            //                     0, features->y_max, 0, 0);
-
-            //input_set_abs_params(input_dev, ABS_MT_POSITION_X,
-            //             0, features->x_max,
-            //             features->x_fuzz, 0);
-            //input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
-            //             0, features->y_max,
-            //             features->y_fuzz, 0);
+            input_set_abs_params(um, ABS_MT_TOUCH_MAJOR,
+                            0, features->x_max, 0, 0);
+            input_set_abs_params(um, ABS_MT_TOUCH_MINOR,
+                            0, features->y_max, 0, 0);
+            err = WacomCreateSlots(um);
+            if (err)
+            {
+                DebugLog(20, um, "WacomSetupCapabilities: Cannot create wacom slots\n");
+                return;
+            }
         }
         break;
 
     case INTUOS4:
     case INTUOS4L:
     case INTUOS4S:
-        SetAbsParams(um, ABS_Z, -900, 899, 0, 0);
+        input_set_abs_params(um, ABS_Z, -900, 899, 0, 0);
         WacomSetupIntuos(um);
 
         //__set_bit(INPUT_PROP_POINTER, input_dev->propbit);
@@ -457,8 +543,8 @@ void WacomSetupCapabilities(struct usbtablet* um)
 
     case WACOM_24HDT:
         if (features->device_type == BTN_TOOL_FINGER) {
-            //input_set_abs_params(input_dev, ABS_MT_WIDTH_MAJOR, 0, features->x_max, 0, 0);
-            //input_set_abs_params(input_dev, ABS_MT_WIDTH_MINOR, 0, features->y_max, 0, 0);
+            input_set_abs_params(um, ABS_MT_WIDTH_MAJOR, 0, features->x_max, 0, 0);
+            input_set_abs_params(um, ABS_MT_WIDTH_MINOR, 0, features->y_max, 0, 0);
         }
         /* fall through */
 
@@ -466,11 +552,11 @@ void WacomSetupCapabilities(struct usbtablet* um)
     case DTH2452T:
     case WACOM_MSPROT:
         if (features->device_type == BTN_TOOL_FINGER) {
-            //input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, features->x_max, 0, 0);
-            //if (features->type != WACOM_24HDT)
-                //input_set_abs_params(input_dev, ABS_MT_TOUCH_MINOR,
-                //             0, features->y_max, 0, 0);
-            //input_set_abs_params(input_dev, ABS_MT_ORIENTATION, 0, 1, 0, 0);
+            input_set_abs_params(um, ABS_MT_TOUCH_MAJOR, 0, features->x_max, 0, 0);
+            if (features->type != WACOM_24HDT)
+                input_set_abs_params(um, ABS_MT_TOUCH_MINOR,
+                                0, features->y_max, 0, 0);
+            input_set_abs_params(um, ABS_MT_ORIENTATION, 0, 1, 0, 0);
         }
         /* fall through */
 
@@ -487,19 +573,15 @@ void WacomSetupCapabilities(struct usbtablet* um)
     case MTTPC:
     case MTTPC_B:
     case MTTPC_C:
-        err = WacomCreateSlots(um);
-        if (err)
-            return;
-        /* fall through */
-
     case TABLETPC2FG:
-        if (features->device_type == BTN_TOOL_FINGER) {
-
-            //input_mt_init_slots(input_dev, features->touch_max);
-            //input_set_abs_params(input_dev, ABS_MT_POSITION_X,
-            //        0, features->x_max, 0, 0);
-            //input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
-            //        0, features->y_max, 0, 0);
+        if ((features->device_type == BTN_TOOL_FINGER) && features->touch_max > 1)
+        {
+            err = WacomCreateSlots(um);
+            if (err)
+            {
+                DebugLog(20, um, "WacomSetupCapabilities: Cannot create wacom slots\n");
+                return;
+            }
         }
         /* fall through */
 
@@ -570,9 +652,8 @@ void WacomSetupCapabilities(struct usbtablet* um)
     case BAMBOO_PT:
         //__clear_bit(ABS_MISC, input_dev->absbit);
 
-        //__set_bit(INPUT_PROP_POINTER, input_dev->propbit);
-
         if (features->device_type == BTN_TOOL_FINGER) {
+
             SETBITS(um->buttonCapabilities, BTN_LEFT, 1);
             SETBITS(um->buttonCapabilities, BTN_FORWARD, 1);
             SETBITS(um->buttonCapabilities, BTN_BACK, 1);
@@ -580,28 +661,20 @@ void WacomSetupCapabilities(struct usbtablet* um)
 
             if (features->touch_max) {
                 if (features->pktlen == WACOM_PKGLEN_BBTOUCH3) {
-                    SETBITS(um->toolCapabilities, BTN_TOOL_TRIPLETAP,
-                          1);
-                    SETBITS(um->toolCapabilities, BTN_TOOL_QUADTAP,
-                          1);
-
-                    //input_set_abs_params(input_dev,
-                    //         ABS_MT_TOUCH_MAJOR,
-                    //         0, features->x_max, 0, 0);
-                    //input_set_abs_params(input_dev,
-                    //         ABS_MT_TOUCH_MINOR,
-                    //         0, features->y_max, 0, 0);
+                    input_set_abs_params(um,
+                             ABS_MT_TOUCH_MAJOR,
+                             0, features->x_max, 0, 0);
+                    input_set_abs_params(um,
+                             ABS_MT_TOUCH_MINOR,
+                             0, features->y_max, 0, 0);
                 }
 
-                //input_set_abs_params(input_dev, ABS_MT_POSITION_X,
-                //             0, features->x_max,
-                //             features->x_fuzz, 0);
-                //input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
-                //             0, features->y_max,
-                //             features->y_fuzz, 0);
-                SETBITS(um->toolCapabilities, BTN_TOOL_FINGER, 1);
-                SETBITS(um->toolCapabilities, BTN_TOOL_DOUBLETAP, 1);
-                //input_mt_init_slots(input_dev, features->touch_max);
+                err = WacomCreateSlots(um);
+                if (err)
+                {
+                    DebugLog(20, um, "WacomSetupCapabilities: Cannot create wacom slots\n");
+                    return;
+                }
             } else {
                 /* buttons/keys only interface */
                 //__clear_bit(ABS_X, input_dev->absbit);
@@ -617,6 +690,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
                 }
             }
         } else if (features->device_type == BTN_TOOL_PEN) {
+            //__set_bit(INPUT_PROP_POINTER, input_dev->propbit);
             if (features->type == INTUOSHT2 || features->type == INTUOSHT3) {
                 //__set_bit(ABS_MISC, input_dev->absbit);
                 WacomSetupBasicProPen(um);
@@ -625,7 +699,7 @@ void WacomSetupCapabilities(struct usbtablet* um)
                 SETBITS(um->toolCapabilities, BTN_TOOL_PEN, 1);
                 SETBITS(um->buttonCapabilities, BTN_STYLUS, 1);
                 SETBITS(um->buttonCapabilities, BTN_STYLUS2, 1);
-                SetAbsParams(um, ABS_DISTANCE, 0,
+                input_set_abs_params(um, ABS_DISTANCE, 0,
                           features->distance_max,
                           features->distance_fuzz, 0);
             }
@@ -731,7 +805,7 @@ static void WacomHandler_dtu(struct usbtablet *um)
 static int WacomHandler_dtus(struct usbtablet *um)
 {
     UBYTE *data = um->UsbData;
-    struct wacom_features *features = um->features;
+    struct wacom_features *features = &um->features;
     struct WacomState *state = &um->currentState;
     unsigned short prox, pressure = 0;
     uint64 buttons = 0;
@@ -855,7 +929,7 @@ static int WacomHandler_dth1152(struct usbtablet *wacom)
 /// Handler PL
 static void WacomHandler_pl(struct usbtablet *um)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     unsigned char *data = um->UsbData;
     int prox, pressure;
     uint64 buttons = 0;
@@ -968,7 +1042,7 @@ static void WacomHandler_ptu(struct usbtablet *um)
 static void WacomHandler_bpt_touch(struct usbtablet *um)
 {
     uint64 buttons = 0;
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     UBYTE *data = um->UsbData;
     int i = 0;
     struct WacomState *state = &um->currentState;
@@ -1009,7 +1083,7 @@ static void WacomHandler_bpt_touch(struct usbtablet *um)
 
 static void WacomHandler_bpt3_touch_msg(struct usbtablet *um, unsigned char *data, uint64 * pButtons)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     //struct input_dev *input = wacom->input;
     BOOL touch = data[1] & 0x80;
     //int slot = data[0] - 2;  /* data[0] is between 2 and 17 */
@@ -1057,7 +1131,7 @@ static void WacomHandler_bpt3_touch_msg(struct usbtablet *um, unsigned char *dat
 
 static void WacomHandler_bpt3_button_msg(struct usbtablet *um, unsigned char *data, uint64 * pButtons)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     uint32 buttons = *pButtons;
 
     if (features->type == INTUOSHT || features->type == INTUOSHT2) {
@@ -1109,7 +1183,7 @@ static int WacomHandler_bpt3_touch(struct usbtablet *um)
 
 static void WacomHandler_bpt_pen(struct usbtablet *um)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     UBYTE *data = um->UsbData;
     int x = 0, y = 0, p = 0, d = 0;
     BOOL pen = FALSE, btn1 = FALSE, btn2 = FALSE;
@@ -1188,7 +1262,7 @@ static void WacomHandler_bpt_pen(struct usbtablet *um)
 
 static void WacomHandler_bpt(struct usbtablet *um, size_t len)
 {
-    struct wacom_features *features = um->features;
+    struct wacom_features *features = &um->features;
 
     if ((features->type == INTUOSHT2) &&
         (features->device_type == BTN_TOOL_PEN))
@@ -1207,7 +1281,7 @@ static void WacomHandler_bpt(struct usbtablet *um, size_t len)
 //// Handler Graphire
 static void WacomHandler_graphire(struct usbtablet *um)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     UBYTE *data = um->UsbData;
     int prox;
     int rw = 0;
@@ -1225,7 +1299,7 @@ static void WacomHandler_graphire(struct usbtablet *um)
     {
         uint16 sCurIndex = 0;
         DebugLog(30, um, "Data received:\n");
-        for( ;sCurIndex < um->features->pktlen; sCurIndex++)
+        for( ;sCurIndex < features->pktlen; sCurIndex++)
         {
             DebugLog(30, um,  "%02x ", data[sCurIndex] );
         }
@@ -1339,7 +1413,7 @@ static void WacomHandler_graphire(struct usbtablet *um)
 
 static int wacom_intuos_pad(struct usbtablet *wacom)
 {
-    const struct wacom_features *features = wacom->features;
+    const struct wacom_features *features = &wacom->features;
     unsigned char *data = wacom->UsbData;
     int i;
     int buttons = 0, nbuttons = features->numbered_buttons;
@@ -1560,7 +1634,7 @@ static int wacom_intuos_get_tool_type(int tool_id)
 
 static int wacom_intuos_inout(struct usbtablet *um)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     unsigned char *data = um->UsbData;
     struct WacomState *state = &um->currentState;
     int idx = (features->type == INTUOS) ? (data[1] & 0x01) : 0;
@@ -1646,7 +1720,7 @@ static inline BOOL report_touch_events(struct usbtablet *wacom)
 
 static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *toolIdx)
 {
-    const struct wacom_features *features = um->features;
+    const struct wacom_features *features = &um->features;
     unsigned char *data = um->UsbData;
     int idx = (features->type == INTUOS) ? (data[1] & 0x01) : 0;
     unsigned char type = (data[1] >> 1) & 0x0F;
@@ -1882,44 +1956,9 @@ static void wacom_mspro_touch_toggle(struct usbtablet *wacom)
     wacom_mspro_touch_switch(wacom, !wacom->is_touch_on);
 }
 
-static void __wacom_notify_battery(struct wacom_battery *battery,
-                   int bat_status, int bat_capacity,
-                   BOOL bat_charging, BOOL bat_connected,
-                   BOOL ps_connected)
-{
-    BOOL changed = battery->bat_status       != bat_status    ||
-               battery->battery_capacity != bat_capacity  ||
-               battery->bat_charging     != bat_charging  ||
-               battery->bat_connected    != bat_connected ||
-               battery->ps_connected     != ps_connected;
-
-    if (changed) {
-        battery->bat_status = bat_status;
-        battery->battery_capacity = bat_capacity;
-        battery->bat_charging = bat_charging;
-        battery->bat_connected = bat_connected;
-        battery->ps_connected = ps_connected;
-
-        // ABA consider need for notifying GUI
-        //if (battery->battery.dev)
-        //    power_supply_changed(&battery->battery);
-    }
-}
-
-static void wacom_notify_battery(struct usbtablet *wacom_wac,
-    int bat_status, int bat_capacity, BOOL bat_charging,
-    BOOL bat_connected, BOOL ps_connected)
-{
-    //struct wacom *wacom = container_of(wacom_wac, struct wacom, wacom_wac);
-
-    __wacom_notify_battery(&wacom_wac->battery, bat_status, bat_capacity,
-                   bat_charging, bat_connected, ps_connected);
-}
-
 static int wacom_mspro_device_irq(struct usbtablet *wacom)
 {
-    //struct wacom *w = container_of(wacom, struct wacom, wacom_wac);
-    //struct wacom_features *features = wacom->features;
+    struct wacom_features *features = &wacom->features;
     unsigned char *data = wacom->UsbData;
     BOOL bat_charging;
     int battery_level;
@@ -1927,13 +1966,7 @@ static int wacom_mspro_device_irq(struct usbtablet *wacom)
     battery_level = data[1] & 0x7F;
     bat_charging = data[1] & 0x80;
 
-    //ABA: following lines are only to handle battery psy driver falldown/reinit
-    //if (!w->battery.battery.dev &&
-    //    !(features->quirks & WACOM_QUIRK_BATTERY)) {
-    //    features->quirks |= WACOM_QUIRK_BATTERY;
-    //    wacom_schedule_work(wacom, WACOM_WORKER_BATTERY);
-    //}
-
+    features->quirks |= WACOM_QUIRK_BATTERY;
     wacom_notify_battery(wacom, WACOM_POWER_SUPPLY_STATUS_AUTO,
                  battery_level, bat_charging, 1, bat_charging);
 
@@ -1955,7 +1988,7 @@ int wacom_mask_with_numbered_buttons(int nbuttons, int buttons)
 
 static int wacom_mspro_pad_irq(struct usbtablet *wacom, uint64 *pButtons, uint32 *toolIdx)
 {
-    struct wacom_features *features = wacom->features;
+    struct wacom_features *features = &wacom->features;
     unsigned char *data = wacom->UsbData;
     //struct input_dev *input = wacom->input;
     int nbuttons = features->numbered_buttons;
@@ -1989,6 +2022,11 @@ static int wacom_mspro_pad_irq(struct usbtablet *wacom, uint64 *pButtons, uint32
             ring = LE_INT16(*((uint16 *)&data[4]));
             keys = 0;
             break;
+        case 8: /* Cintiq Pro 16 */
+            buttons = data[1];
+            keys = 0;
+            ring = WACOM_INTUOSP2_RING_UNTOUCHED; /* No ring */
+            break;
         case 0:
             buttons = 0;
             ring = WACOM_INTUOSP2_RING_UNTOUCHED; /* No ring */
@@ -2014,7 +2052,8 @@ static int wacom_mspro_pad_irq(struct usbtablet *wacom, uint64 *pButtons, uint32
         if (ringvalue > 71)
             ringvalue -= 72;
     } else if (features->oPid == 0x34d || features->oPid == 0x34e ||
-         features->oPid == 0x398 || features->oPid == 0x399) {
+         features->oPid == 0x398 || features->oPid == 0x399 ||
+         features->oPid == 0x3aa) {
         /* MobileStudio Pro */
         ringvalue = 35 - (ring & 0x7F);
         ringvalue += 36/2;
@@ -2083,7 +2122,7 @@ static int wacom_mspro_pen_irq(struct usbtablet *wacom, uint64 *pButtons, uint32
     /* invert   = data[1] & 0x10; */
     range       = data[1] & 0x20;
     proximity   = data[1] & 0x40;
-    x           = LE_INT32(*((int32*)&data[2])) & 0xFFFFFF;
+    x           = LE_INT32(*((int32 *)&data[2])) & 0xFFFFFF;
     y           = LE_INT32(*((int32 *)&data[5])) & 0xFFFFFF;
     pressure    = LE_INT16(*((int16 *)&data[8]));
     tilt_x      = (char)data[10];
@@ -2102,7 +2141,7 @@ static int wacom_mspro_pen_irq(struct usbtablet *wacom, uint64 *pButtons, uint32
 
     /* pointer going from fully "in range" to merely "in proximity" */
     if (!range && wacom->tool[0]) {
-        height = wacom->features->distance_max;
+        height = wacom->features.distance_max;
     }
 
     /*
@@ -2227,7 +2266,7 @@ static void wacom_report_numbered_buttons(/*struct input_dev *input_dev,*/
 
 static int WacomCreateSlots(struct usbtablet *um)
 {
-    struct wacom_features *features = um->features;
+    struct wacom_features *features = &um->features;
     int i;
 
     if (features->device_type != BTN_TOOL_FINGER)
@@ -2262,7 +2301,7 @@ VOID WacomHandler( struct usbtablet *um )
     {
         if ( req->io_Error == USBERR_NOERROR )
         {
-            switch(um->features->type)
+            switch(um->features.type)
             {
                 case PENPARTNER:
                     WacomHandler_penpartner(um);
@@ -2329,7 +2368,7 @@ VOID WacomHandler( struct usbtablet *um )
                         um->UsbData[0] == WACOM_REPORT_VENDOR_DEF_TOUCH*/)
                     {
                         //sync = wacom_multitouch_generic(um);
-                        DebugLog(0, um, "WacomHandler: AmigaOS does not support multitouch yet, hence tablet type %ld, '%s' is not supported\n", um->features->type, um->features->name);
+                        DebugLog(0, um, "WacomHandler: AmigaOS does not support multitouch yet, hence tablet type %ld, '%s' is not supported\n", um->features.type, um->features.name);
                     }
                     else
                     {
@@ -2343,7 +2382,7 @@ VOID WacomHandler( struct usbtablet *um )
                 case DTH2452T:
                 case WACOM_MSPROT:
                     //sync = wacom_multitouch_generic(um);
-                    DebugLog(0, um, "WacomHandler: AmigaOS does not support multitouch yet, hence tablet type %ld, '%s' is not supported\n", um->features->type, um->features->name);
+                    DebugLog(0, um, "WacomHandler: AmigaOS does not support multitouch yet, hence tablet type %ld, '%s' is not supported\n", um->features.type, um->features.name);
                     break;
 
                 case INTUOS5S:
@@ -2357,7 +2396,7 @@ VOID WacomHandler( struct usbtablet *um )
                     else if (um->UsbData[0] == WACOM_REPORT_USB)
                     {
                         //sync = wacom_status_irq(um, len);
-                        DebugLog(0, um, "WacomHandler: unsupported status tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                        DebugLog(0, um, "WacomHandler: unsupported status tablet type %ld, '%s'\n", um->features.type, um->features.name);
                     }
                     else
                         WacomHandler_intuos(um);
@@ -2369,7 +2408,7 @@ VOID WacomHandler( struct usbtablet *um )
                     if (um->UsbData[0] == WACOM_REPORT_USB)
                     {
                         //sync = wacom_status_irq(wacom_wac, len);
-                        DebugLog(0, um, "WacomHandler: unsupported status tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                        DebugLog(0, um, "WacomHandler: unsupported status tablet type %ld, '%s'\n", um->features.type, um->features.name);
                     }
                     else
                         WacomHandler_bpt(um, req->io_Actual);
@@ -2380,7 +2419,7 @@ VOID WacomHandler( struct usbtablet *um )
                     break;
 
                 default:
-                    DebugLog(0, um, "WacomHandler: unsupported unknown tablet type %ld, '%s'\n", um->features->type, um->features->name);
+                    DebugLog(0, um, "WacomHandler: unsupported unknown tablet type %ld, '%s'\n", um->features.type, um->features.name);
                     break;
             }
         }
@@ -2409,14 +2448,14 @@ VOID WacomHandler( struct usbtablet *um )
         /* Send USB Mouse Request */
         um->UsbIOReq->io_Command    = CMD_READ;
         um->UsbIOReq->io_Data       = um->UsbData;
-        um->UsbIOReq->io_Length     = um->features->pktlen;
+        um->UsbIOReq->io_Length     = um->features.pktlen;
         um->UsbIOReq->io_Flags      = 0;
         um->UsbIOReq->io_Actual     = 0;
         um->UsbIOReq->io_EndPoint   = um->UsbStatusEndPoint;
 
-        if ( um->UsbIOReq->io_Length > LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize ))
+        if ( um->UsbIOReq->io_Length > (LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize ) & USBEP_SIZEM_MAXPACKETSIZE))
         {
-            um->UsbIOReq->io_Length = LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize );
+            um->UsbIOReq->io_Length = (LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize ) & USBEP_SIZEM_MAXPACKETSIZE);
         }
 
         DebugLog(30, um, "WacomHandler: about to resend the USB Request\n");

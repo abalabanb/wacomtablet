@@ -299,6 +299,7 @@ enum {
 */
     WACOM_REPORT_CINTIQ             = 16,
     WACOM_REPORT_MSPRO              = 16,
+    WACOM_REPORT_PRO2022            = 30,
     WACOM_REPORT_INTUOS_PEN         = 16,
     WACOM_REPORT_CINTIQPAD          = 17,
     WACOM_REPORT_DTUS               = 17,
@@ -460,6 +461,7 @@ struct wacom_features {
     unsigned touch_max;
     int oVid;
     int oPid;
+    unsigned short sequence_number;
 };
 
 struct wacom_battery {
