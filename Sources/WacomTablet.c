@@ -64,6 +64,8 @@
  *                      - Fixed: correctly handle whole buttonAction not first 32
  *                      - Added: support for mspro-like tablets
  *                      - Fixed: incorrect curve usage during pression conversion
+ *                      - Fixed: ed_MaxPacketSize used unmasked, not a big deal as
+ *                               no wacom endpoint is isochronous, but anyway
  *   1.1    2019-11-03  - Updated: code updated to input-wacom 0.44
  *                                 (PenPartner, DTU, DTUS, DTH1152, PL, PTU,
  *                                  Bamboo pen & touch)
@@ -118,7 +120,7 @@
 
 #include "WacomTablet.h"
 
-#define DebugLevel  1
+#define DebugLevel  40
 
 /// Version variables
 extern uint16 version;
@@ -188,7 +190,11 @@ struct TagItem libCreateTags[] = {
 ///
 
 /// Forward declarations
-static int WacomSwitchToTabletMode(struct usbtablet *um);
+static int wacom_set_device_mode(struct usbtablet* wacom_wac, int report_id, int length, int mode);
+static int wacom_query_tablet_data(struct usbtablet *um, struct wacom_features *features);
+static void wacom_set_default_phy(struct wacom_features *features);
+static void wacom_calculate_res(struct wacom_features *features);
+static int wacom_retrieve_hid_descriptor(struct usbtablet *intf, struct wacom_features *features);
 ///
 
 
@@ -226,6 +232,7 @@ int32 _start( STRPTR argstring, int32 arglen, APTR SysBase )
 /* -- Manager Interface -- */
 
 /// _manager_Init
+struct NewlibIFace * INewlib = NULL;
 
 /* The ROMTAG Init Function */
 struct Library *_manager_Init(
@@ -252,6 +259,20 @@ struct Library *_manager_Init(
     libBase->rmb_IExec      = IExec;
 
     libBase->rmb_IExec->Obtain();
+
+    libBase->rmb_NewlibBase = IExec->OpenLibrary( "newlib.library", 1 );
+
+    if ( libBase->rmb_NewlibBase )
+    {
+        libBase->rmb_INewlib = (struct NewlibIFace *)IExec->GetInterface( libBase->rmb_NewlibBase, "main", 1, NULL );
+
+        if ( !libBase->rmb_INewlib )
+        {
+            return( NULL );
+        }
+    } else return( NULL );
+
+    INewlib = libBase->rmb_INewlib;
 
 //---------------------------------------------------------------
 
@@ -426,6 +447,15 @@ APTR _manager_Expunge(
 
         if ( libBase->rmb_USBResourceBase ) {
             libBase->rmb_IExec->CloseLibrary( libBase->rmb_USBResourceBase );
+        }
+
+        if ( libBase->rmb_INewlib ) {
+            INewlib = NULL;
+            libBase->rmb_IExec->DropInterface( (struct Interface *)libBase->rmb_INewlib );
+        }
+
+        if ( libBase->rmb_NewlibBase ) {
+            libBase->rmb_IExec->CloseLibrary( libBase->rmb_NewlibBase );
         }
 
         /* Remove Library from Public */
@@ -701,7 +731,7 @@ void DumpBuf( struct usbtablet *um, UBYTE *buf, ULONG len )
                 case USBEPTT_INTERRUPT :    DebugLog( 40, um, "Interrupt");break;
                 default: DebugLog( 40, um, "unknown Transfert type");
             }
-            DebugLog( 40, um, " %s %s\n\tPacket size :%ld\n\tPolling Interval : %d ms\n",pDesc->ed_Attributes&USBCFGATRF_REMOTEWAKEUP?"Remote WakeUp":"", pDesc->ed_Attributes&USBCFGATRF_SELFPOWERED?"Self Powered":"", LE_WORD(pDesc->ed_MaxPacketSize), pDesc->ed_Interval );
+            DebugLog( 40, um, " %s %s\n\tPacket size :%ld\n\tPolling Interval : %d ms\n",pDesc->ed_Attributes&USBCFGATRF_REMOTEWAKEUP?"Remote WakeUp":"", pDesc->ed_Attributes&USBCFGATRF_SELFPOWERED?"Self Powered":"", (LE_WORD(pDesc->ed_MaxPacketSize) & USBEP_SIZEM_MAXPACKETSIZE), pDesc->ed_Interval );
         }
         break;
         case USBDESC_CONFIGURATION :
@@ -879,18 +909,33 @@ uint32 WacomStartup( struct usbtablet *um )
             return( FALSE );            
         } 
 
-        um->features = wacom_devices[nProductIndex].features;
-        um->RangeX = (uint16)um->features->x_max;
-        um->RangeY = (uint16)um->features->y_max;
-        um->RangeP = (uint16)um->features->pressure_max;
-        um->touch_arbitration = 1;
-        DebugLog( 20, um, "Identified product '%s'\n", um->features->name );
+        um->features = *wacom_devices[nProductIndex].features;
+        DebugLog( 20, um, "Identified product '%s'\n", um->features.name );
     }
     else
     {
         um->IUSBSys->USBLogPuts( 1, NULL, "Unable to identify device because DeviceDesc can't be obtained" );
         return( FALSE );
     }
+
+    /* set the default size in case we do not get them from hid */
+    wacom_set_default_phy(&um->features);
+
+    /* Retrieve the physical and logical size for touch devices */
+    int32 error = wacom_retrieve_hid_descriptor(um, &um->features);
+    if (error)
+    {
+        um->IUSBSys->USBLogPuts( 1, NULL, "Unable to retrieve hid descriptor" );
+        return( FALSE );
+    }
+
+    wacom_setup_device_quirks(um);
+    wacom_calculate_res(&um->features);
+
+    um->RangeX = (uint16)um->features.x_max;
+    um->RangeY = (uint16)um->features.y_max;
+    um->RangeP = (uint16)um->features.pressure_max;
+    um->touch_arbitration = 1;
 
     TEXT debug_var[10];
     if((um->IDOS->GetVar("WacomTablet/DEBUG",debug_var,sizeof(debug_var),GVF_GLOBAL_ONLY) > 0))
@@ -903,7 +948,9 @@ uint32 WacomStartup( struct usbtablet *um )
     LoadValues(um);
     DebugLog(20, um, "--> Prefs Loaded\n" );
 
-    WacomSetupCapabilities(um);
+    if (!((&(um->features))->quirks & WACOM_QUIRK_NO_INPUT)) {
+        WacomSetupCapabilities(um);
+    }
 
     /*set up commodity for GUI */
 
@@ -938,11 +985,10 @@ uint32 WacomStartup( struct usbtablet *um )
         return( FALSE );
     }
 
-    int32 error = WacomSwitchToTabletMode(um);
+    error = wacom_query_tablet_data(um, &um->features);
     if( 0 != error )
     {
         DebugLog(0, um, "Can't switch to Wacom mode, error %ld\n", error );
-        return( FALSE );
     }
 
     /* Find EndPoints  */
@@ -989,7 +1035,7 @@ uint32 WacomStartup( struct usbtablet *um )
         return( FALSE );
     }
 
-    um->UsbData = um->IExec->AllocVecTags(  um->features->pktlen, 
+    um->UsbData = um->IExec->AllocVecTags(  um->features.pktlen,
                                             AVT_Type, MEMF_SHARED,
                                             AVT_ClearWithValue, 0,
                                             TAG_DONE );
@@ -1022,12 +1068,12 @@ uint32 WacomStartup( struct usbtablet *um )
     /* Start the data flow */
     um->UsbIOReq->io_Command    = CMD_READ;
     um->UsbIOReq->io_Data       = um->UsbData;
-    um->UsbIOReq->io_Length     = um->features->pktlen;
+    um->UsbIOReq->io_Length     = um->features.pktlen;
     um->UsbIOReq->io_EndPoint   = um->UsbStatusEndPoint;
 
-    if ( um->UsbIOReq->io_Length > LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize ))
+    if ( um->UsbIOReq->io_Length > (LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize ) & USBEP_SIZEM_MAXPACKETSIZE))
     {
-        um->UsbIOReq->io_Length = LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize );
+        um->UsbIOReq->io_Length = (LE_WORD( um->UsbEndPointDscrIn->ed_MaxPacketSize ) & USBEP_SIZEM_MAXPACKETSIZE);
     }
 
     um->IExec->SendIO( (struct IORequest *)um->UsbIOReq );
@@ -1492,18 +1538,19 @@ uint32 SendMouseEvent(struct usbtablet *um, uint32 buttons)
 BOOL TabletStateHasChanged(struct usbtablet *wacom)
 {
     BOOL change = 0;
+    struct wacom_features * features = &wacom->features;
 
-    if(abs(wacom->currentState.X - wacom->prevState.X) >= max(10, wacom->fuzzX)) change++;
-    if(abs(wacom->currentState.Y - wacom->prevState.Y) >= max(10, wacom->fuzzY)) change++;
-    if(abs(wacom->currentState.Z - wacom->prevState.Z) >= max(10, wacom->fuzzZ)) change++;
-    if(abs(wacom->currentState.tiltX - wacom->prevState.tiltX) >= max(4, wacom->fuzzTiltX)) change++;
-    if(abs(wacom->currentState.tiltY - wacom->prevState.tiltY) >= max(4, wacom->fuzzTiltY)) change++;
+    if(abs(wacom->currentState.X - wacom->prevState.X) >= max(10, features->x_fuzz)) change++;
+    if(abs(wacom->currentState.Y - wacom->prevState.Y) >= max(10, features->y_fuzz)) change++;
+    if(abs(wacom->currentState.Z - wacom->prevState.Z) >= max(10, features->distance_fuzz)) change++;
+    if(abs(wacom->currentState.tiltX - wacom->prevState.tiltX) >= max(4, features->tilt_fuzz)) change++;
+    if(abs(wacom->currentState.tiltY - wacom->prevState.tiltY) >= max(4, features->tilt_fuzz)) change++;
     if(abs(wacom->currentState.tiltZ - wacom->prevState.tiltZ) >= max(4, 1/*wacom->fuzzTiltZ*/)) change++;
-    if(abs(wacom->currentState.Pressure - wacom->prevState.Pressure) >= max(1, wacom->features->pressure_fuzz)) change++;
+    if(abs(wacom->currentState.Pressure - wacom->prevState.Pressure) >= max(1, features->pressure_fuzz)) change++;
     if(abs(wacom->currentState.proximity[0] - wacom->prevState.proximity[0]) >= 1) change++;
     if(abs(wacom->currentState.proximity[1] - wacom->prevState.proximity[1]) >= 1) change++;
-    if(abs(wacom->currentState.wheel[0] - wacom->prevState.wheel[0]) >= max(1, wacom->fuzzWheel)) change++;
-    if(abs(wacom->currentState.wheel[1] - wacom->prevState.wheel[1]) >= max(1, wacom->fuzzWheel)) change++;
+    if(abs(wacom->currentState.wheel[0] - wacom->prevState.wheel[0]) >= max(1, 1/*wacom->fuzzWheel*/)) change++;
+    if(abs(wacom->currentState.wheel[1] - wacom->prevState.wheel[1]) >= max(1, 1/*wacom->fuzzWheel*/)) change++;
 
     if(change)
     {
@@ -1628,9 +1675,9 @@ uint32 SendTabletEvent(uint8 toolIdx, struct usbtablet *um, uint32 buttons)
             um->IENT_Tags[3].ti_Tag = TABLETA_TabletZ;
             um->IENT_Tags[3].ti_Data = um->currentState.Z;
             um->IENT_Tags[4].ti_Tag = TABLETA_AngleX;
-            um->IENT_Tags[4].ti_Data = -(um->currentState.tiltY - ((um->maxTiltY - um->minTiltY) / 2)) * (0x7fffffff / 360);
+            um->IENT_Tags[4].ti_Data = -(um->currentState.tiltY - ((input_abs_get_max(um,ABS_TILT_Y) - input_abs_get_min(um,ABS_TILT_Y)) / 2)) * (0x7fffffff / 360);
             um->IENT_Tags[5].ti_Tag = TABLETA_AngleY;
-            um->IENT_Tags[5].ti_Data = (um->currentState.tiltX - ((um->maxTiltX - um->minTiltX) / 2)) * (0x7fffffff / 360);
+            um->IENT_Tags[5].ti_Data = (um->currentState.tiltX - ((input_abs_get_max(um,ABS_TILT_X) - input_abs_get_min(um,ABS_TILT_X)) / 2)) * (0x7fffffff / 360);
             um->IENT_Tags[6].ti_Tag = TABLETA_AngleZ;
             um->IENT_Tags[6].ti_Data = um->currentState.tiltZ;
 
@@ -1786,133 +1833,304 @@ uint32 ConvertPressure(struct usbtablet *um, uint32 pressure)
 
 ///
 
+/* defines to get/set USB message */
 #define USB_REQ_GET_REPORT  0x01
 #define USB_REQ_SET_REPORT  0x09
+
 #define WAC_HID_FEATURE_REPORT  0x03
+#define WAC_MSG_RETRIES     5
 
-int usb_get_report(struct usbtablet *um, unsigned char type,
-                unsigned char id, void *buf, int size)
+int wacom_get_report(struct usbtablet *um, uint8 type, uint8 id,
+                void *buf, int size, unsigned int retries)
 {
-    DebugLog(45, um, "usb_get_report: type %c id %c buffer %08x buffer size %ld\n", type, id, buf, size );
+    DebugLog(45, um, "wacom_get_report: type %c id %c buffer %08x buffer size %ld\n", type, id, buf, size );
+    int32 retval;
 
-    int32 rc = um->IUSBSys->USBEPControlXferA( um->USBReq, um->UsbControlEndPoint, 
-        USB_REQ_GET_REPORT, USBSDT_TYP_CLASS | USBSDT_REC_INTERFACE | USBSDT_DIR_DEVTOHOST,
-        (type << 8) + id, um->IntDsc->id_InterfaceID,
-        buf, size, NULL );
-    DebugLog(45, um, "usb_get_report: rc %ld\n", rc );
+    do {
+        retval = um->IUSBSys->USBEPControlXferA( um->USBReq, um->UsbControlEndPoint,
+            USB_REQ_GET_REPORT,
+            USBSDT_DIR_DEVTOHOST | USBSDT_TYP_CLASS |
+            USBSDT_REC_INTERFACE,
+            (type << 8) + id,
+            um->IntDsc->id_InterfaceID,
+            buf, size, NULL );
+    } while ((retval == USBERR_TIMEOUT || retval == USBERR_NAK) && --retries);
 
-    return  rc;
+    if (retval < 0)
+        DebugLog(0, um, "%s - ran out of retries (last error = %d)\n",
+            __func__, retval);
+    return retval;
 }
 
-int usb_set_report(struct usbtablet *um, unsigned char type,
-                unsigned char id, void *buf, int size)
+int wacom_set_report(struct usbtablet *um, uint8 type, uint8 id,
+                void *buf, int size, unsigned int retries)
 {
-    DebugLog(45, um, "usb_set_report: type %c id %c buffer %08x buffer size %ld\n", type, id, buf, size );
+    DebugLog(45, um, "wacom_set_report: type %c id %c buffer %08x buffer size %ld\n", type, id, buf, size );
+    int32 retval;
 
-    int32 rc = um->IUSBSys->USBEPControlXferA( um->USBReq, um->UsbControlEndPoint,
-        USB_REQ_SET_REPORT, USBSDT_TYP_CLASS | USBSDT_REC_INTERFACE,
-        (type << 8) + id, um->IntDsc->id_InterfaceID,
-        buf, size, NULL);
-    DebugLog(45, um, "usb_set_report: rc %ld\n", rc );
+    do {
+        retval = um->IUSBSys->USBEPControlXferA( um->USBReq, um->UsbControlEndPoint,
+            USB_REQ_SET_REPORT,
+            USBSDT_TYP_CLASS | USBSDT_REC_INTERFACE,
+            (type << 8) + id,
+            um->IntDsc->id_InterfaceID,
+            buf, size, NULL);
+    } while ((retval == USBERR_TIMEOUT || retval == USBERR_NAK) && --retries);
 
-    return  USBERR_STALL == rc ? 0 : rc;
+    if (retval < 0)
+        DebugLog(0, um, "%s - ran out of retries (last error = %d)\n",
+            __func__, retval);
+    return retval;
 }
 ///
 
-//// WacomSwitchToTabletMode -- tries to switch, returns 0 on success, a negative error code otherwise
-static int WacomSwitchToTabletMode(struct usbtablet *um)
+/*
+ * Calculate the resolution of the X or Y axis, given appropriate HID data.
+ * This function is little more than hidinput_calc_abs_res stripped down.
+ */
+static int wacom_calc_hid_res(int logical_extents, int physical_extents,
+                              unsigned char unit, unsigned char exponent)
 {
-    UBYTE *rep_data;
-    int limit = 0, report_id = 2;
-    int error = USBERR_NOMEM;
+    int prev, unit_exponent;
+
+    /* Check if the extents are sane */
+    if (logical_extents <= 0 || physical_extents <= 0)
+        return 0;
+
+    /* Get signed value of nybble-sized twos-compliment exponent */
+    unit_exponent = exponent;
+    if (unit_exponent > 7)
+        unit_exponent -= 16;
+
+    /* Convert physical_extents to millimeters */
+    if (unit == 0x11) {     /* If centimeters */
+        unit_exponent += 1;
+    } else if (unit == 0x13) {  /* If inches */
+        prev = physical_extents;
+        physical_extents *= 254;
+        if (physical_extents < prev)
+            return 0;
+        unit_exponent -= 1;
+    } else {
+        return 0;
+    }
+
+    /* Apply negative unit exponent */
+    for (; unit_exponent < 0; unit_exponent++) {
+        prev = logical_extents;
+        logical_extents *= 10;
+        if (logical_extents < prev)
+            return 0;
+    }
+    /* Apply positive unit exponent */
+    for (; unit_exponent > 0; unit_exponent--) {
+        prev = physical_extents;
+        physical_extents *= 10;
+        if (physical_extents < prev)
+            return 0;
+    }
+
+    /* Calculate resolution */
+    return logical_extents / physical_extents;
+}
+
+static int wacom_set_device_mode(struct usbtablet* um, int report_id, int length, int mode)
+{
+    uint8 *rep_data;
+    int error = USBERR_NOMEM, limit = 0;
 
     rep_data = um->IExec->AllocVecTags(3, AVT_Type, MEMF_SHARED, TAG_END);
     if (!rep_data)
         return error;
 
-    /* ask to report tablet data if it is 2FGT Tablet PC
-     * OR not a Tablet PC */
-    if (/*um->features->device_type == BTN_TOOL_TRIPLETAP &&*/
-            (um->features->type == TABLETPC2FG)) {
-        do {
-            rep_data[0] = 3;
-            rep_data[1] = 4;
-            report_id = 3;
-            error = usb_set_report(um, WAC_HID_FEATURE_REPORT,
-                report_id, rep_data, 2);
-            if (error >= 0)
-                error = usb_get_report(um,
-                    WAC_HID_FEATURE_REPORT, report_id,
-                    rep_data, 3);
-        } while ((error < 0 || rep_data[1] != 4) && limit++ < 5);
-    } else if (um->features->type != TABLETPC && um->features->type != TABLETPC2FG) {
-        do {
-            rep_data[0] = 2;
-            rep_data[1] = 2;
-            error = usb_set_report(um, WAC_HID_FEATURE_REPORT,
-                report_id, rep_data, 2);
-            if (error >= 0)
-                error = usb_get_report(um,
-                    WAC_HID_FEATURE_REPORT, report_id,
-                    rep_data, 2);
-        } while ((error < 0 || rep_data[1] != 2) && limit++ < 5);
-    }
+    do {
+        rep_data[0] = report_id;
+        rep_data[1] = mode;
+
+        error = wacom_set_report(um, WAC_HID_FEATURE_REPORT,
+                                 report_id, rep_data, length, 1);
+    } while ((error < 0 || rep_data[1] != mode) && limit++ < WAC_MSG_RETRIES);
 
     um->IExec->FreeVec(rep_data);
 
     return error != 0 ? error : 0;
 }
+
+//// wacom_query_tablet_data -- switch the tablet into its most-capable mode, returns 0 on success, a negative error code otherwise
+/*
+ * Switch the tablet into its most-capable mode. Wacom tablets are
+ * typically configured to power-up in a mode which sends mouse-like
+ * reports to the OS. To get absolute position, pressure data, etc.
+ * from the tablet, it is necessary to switch the tablet out of this
+ * mode and into one which sends the full range of tablet data.
+ */
+static int wacom_query_tablet_data(struct usbtablet *intf, struct wacom_features *features)
+{
+    if (features->device_type == BTN_TOOL_FINGER) {
+        if (features->type > TABLETPC) {
+            /* MT Tablet PC touch */
+            return wacom_set_device_mode(intf, 3, 4, 4);
+        }
+        else if (features->type == WACOM_24HDT) {
+            return wacom_set_device_mode(intf, 18, 3, 2);
+        }
+        else if (features->type == WACOM_27QHDT) {
+            return wacom_set_device_mode(intf, 131, 3, 2);
+        }
+        else if (features->type == WACOM_MSPROT ||
+             features->type == DTH1152T) {
+            return wacom_set_device_mode(intf, 14, 2, 2);
+        }
+    } else if (features->device_type == BTN_TOOL_PEN) {
+        if (features->type <= BAMBOO_PT) {
+            return wacom_set_device_mode(intf, 2, 2, 2);
+        }
+    }
+
+    return 0;
+}
 ///
 
-/// SetAbsParam
-void SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, int32 fuzz, int32 flat)
+static int wacom_retrieve_hid_descriptor(struct usbtablet *intf,
+                     struct wacom_features *features)
 {
-    switch(paramName)
+    int error = 0;
+    //struct usb_host_interface *interface = intf->cur_altsetting;
+    //struct hid_descriptor *hid_desc;
+    int8 bInterfaceNumber = 0;
+    struct USBBusCfgDsc *pConfDesc = NULL;
+    intf->IUSBSys->USBGetRawInterfaceAttrs( intf->StartMsg->Object, USBA_ConfigurationDesc, (ULONG)&pConfDesc, TAG_END );
+    if ( NULL != pConfDesc )
     {
-        default:
-            DebugLog(0, um, "WacomTablet: unsupported value for paramName '%08x'\n", paramName);
-            break;
-        case ABS_X:
-            um->minX = min;
-            um->maxX = max;
-            um->fuzzX = fuzz;
-            //um->flatX = flat;
-            break;
-        case ABS_Y:
-            um->minY = min;
-            um->maxY = max;
-            um->fuzzY = fuzz;
-            //um->flatY = flat;
-            break;
-        case ABS_Z:
-        case ABS_DISTANCE:
-            // NOTE: https://www.kernel.org/doc/Documentation/input/event-codes.txt,
-            // for now ABS_Z and ABS_DISTANCE are considered as synonyms
-            um->minZ = min;
-            um->maxZ = max;
-            um->fuzzZ = fuzz;
-            //um->flatZ = flat;
-            break;
-        case ABS_WHEEL:
-            um->minWheel = min;
-            um->maxWheel = max;
-            um->fuzzWheel = fuzz;
-            //um->flatWheel = flat;
-            break;
-        case ABS_TILT_X:
-            um->minTiltX = min;
-            um->maxTiltX = max;
-            um->fuzzTiltX = fuzz;
-            //um->flatTiltX = flat;
-            break;
-        case ABS_TILT_Y:
-            um->minTiltY = min;
-            um->maxTiltY = max;
-            um->fuzzTiltY = fuzz;
-            //um->flatTiltY = flat;
-            break;
+        bInterfaceNumber = pConfDesc->cd_NumInterfaces;
+        intf->IUSBSys->USBFreeDescriptors((APTR)pConfDesc);
+    }
+
+    /* default features */
+    features->device_type = BTN_TOOL_PEN;
+    features->x_fuzz = 4;
+    features->y_fuzz = 4;
+    features->pressure_fuzz = 0;
+    features->distance_fuzz = 1;
+    features->tilt_fuzz = 1;
+
+    /*
+     * The wireless device HID is basic and layout conflicts with
+     * other tablets (monitor and touch interface can look like pen).
+     * Skip the query for this type and modify defaults based on
+     * interface number.
+     */
+    if (features->type == WIRELESS) {
+        if (bInterfaceNumber == 0) {
+            features->device_type = 0;
+        } else if (bInterfaceNumber == 2) {
+            features->device_type = BTN_TOOL_FINGER;
+            features->pktlen = WACOM_PKGLEN_BBTOUCH3;
+        }
+    }
+
+    /* only devices that support touch need to retrieve the info */
+    if (features->type < BAMBOO_PT) {
+        goto out;
+    }
+
+    #ifdef TODO_ADD_TOUCH_SUPPORT
+    error = usb_get_extra_descriptor(interface, HID_DEVICET_HID, &hid_desc);
+    if (error) {
+        error = usb_get_extra_descriptor(&interface->endpoint[0],
+                         HID_DEVICET_REPORT, &hid_desc);
+        if (error) {
+            dev_err(&intf->dev,
+                "can not retrieve extra class descriptor\n");
+            goto out;
+        }
+    }
+    error = wacom_parse_hid(intf, hid_desc, features);
+    #endif
+
+ out:
+    return error;
+}
+
+/*
+ * Not all devices report physical dimensions from HID.
+ * Compute the default from hardcoded logical dimension
+ * and resolution before driver overwrites them.
+ */
+static void wacom_set_default_phy(struct wacom_features *features)
+{
+    if (features->x_resolution) {
+        features->x_phy = (features->x_max * 100) /
+                    features->x_resolution;
+        features->y_phy = (features->y_max * 100) /
+                    features->y_resolution;
     }
 }
+
+static void wacom_calculate_res(struct wacom_features *features)
+{
+    /* set unit to "100th of a mm" for devices not reported by HID */
+    if (!features->unit) {
+        features->unit = 0x11;
+        features->unitExpo = 16-3;
+    }
+
+    features->x_resolution = wacom_calc_hid_res(features->x_max,
+                            features->x_phy,
+                            features->unit,
+                            features->unitExpo);
+    features->y_resolution = wacom_calc_hid_res(features->y_max,
+                            features->y_phy,
+                            features->unit,
+                            features->unitExpo);
+}
+
+
+/// SetAbsParam
+void input_set_abs_params(struct usbtablet *um, uint32 axis, int32 min, int32 max, int32 fuzz, int32 flat)
+{
+    if (ABS_MAX < axis)
+    {
+        DebugLog(0, um, "WacomTablet/input_set_abs_params: unsupported axis '%08x'\n", axis);
+    }
+    else
+    {
+        struct absinfo *absinfo = &um->absinfo[axis];
+
+        absinfo->minimum = min;
+        absinfo->maximum = max;
+        absinfo->fuzz = fuzz;
+        absinfo->flat = flat;
+    }
+}
+#define INPUT_GENERATE_ABS_ACCESSORS(_suffix, _item) \
+inline int32 input_abs_get_##_suffix(struct usbtablet *dev,    \
+                      uint32 axis)        \
+{                                   \
+    if (ABS_MAX < axis) \
+    {   \
+        DebugLog(0, dev, "WacomTablet/input_abs_get_"#_suffix": unsupported axis '%08x'\n", axis);  \
+    } \
+    else    \
+    {   \
+        return dev->absinfo[axis]._item;    \
+    }   \
+    \
+    return 0; \
+}                                   \
+                                    \
+inline void input_abs_set_##_suffix(struct usbtablet *dev,   \
+                       uint32 axis, int32 val)  \
+{                                   \
+    dev->absinfo[axis]._item = val;             \
+}
+
+INPUT_GENERATE_ABS_ACCESSORS(val, value)
+INPUT_GENERATE_ABS_ACCESSORS(min, minimum)
+INPUT_GENERATE_ABS_ACCESSORS(max, maximum)
+INPUT_GENERATE_ABS_ACCESSORS(fuzz, fuzz)
+INPUT_GENERATE_ABS_ACCESSORS(flat, flat)
+INPUT_GENERATE_ABS_ACCESSORS(res, resolution)
 ///
 
 CONST_STRPTR GetString(struct LocaleInfo *li, LONG stringNum)
