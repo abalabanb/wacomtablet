@@ -1540,10 +1540,10 @@ static int wacom_intuos_pad(struct usbtablet *wacom)
     return 1;
 }
 
-//static int wacom_intuos_id_mangle(int tool_id)
-//{
-//    return (tool_id & ~0xFFF) << 4 | (tool_id & 0xFFF);
-//}
+static int wacom_intuos_id_mangle(int tool_id)
+{
+    return (tool_id & ~0xFFF) << 4 | (tool_id & 0xFFF);
+}
 
 static int wacom_intuos_get_tool_type(int tool_id)
 {
@@ -1870,8 +1870,7 @@ static int wacom_intuos_general(struct usbtablet *um, uint32 *pButtons, uint32 *
             break;
     }
 
-    //input_report_abs(input, ABS_MISC,
-    //         wacom_intuos_id_mangle(wacom->id[idx])); /* report tool id */
+    *toolIdx = (wacom_intuos_id_mangle(um->id[idx])); /* report tool id */
     //input_report_key(input, wacom->tool[idx], 1);
     //input_event(input, EV_MSC, MSC_SERIAL, wacom->serial[idx]);
     um->reporting_data = TRUE;
@@ -2175,8 +2174,16 @@ static int wacom_mspro_pen_irq(struct usbtablet *wacom, uint64 *pButtons, uint32
         SendWheelEvent(wacom, 0, vWheel, FALSE);
         state->distance[0] =           ( proximity ? height        : 0);
 
-        //input_event(input, EV_MSC, MSC_SERIAL, wacom->serial[0]);
-        //input_report_abs(input, ABS_MISC, proximity ? wacom_intuos_id_mangle(wacom->id[0]) : 0);
+        if (wacom->features.type != WACOM_ONE) {
+            //input_event(input, EV_MSC, MSC_SERIAL,
+            //        wacom->serial[0]);
+            *toolIdx = (proximity ?
+                     wacom_intuos_id_mangle(wacom->id[0])
+                     : 0);
+        } else {
+            *toolIdx = (proximity ?
+                     STYLUS_DEVICE_ID : 0);
+        }
         state->proximity[0] =          ( proximity ? 1 : 0);
 
         if (!proximity)
@@ -2188,13 +2195,122 @@ static int wacom_mspro_pen_irq(struct usbtablet *wacom, uint64 *pButtons, uint32
     return 1;
 }
 
-static void WacomHandler_mspro(struct usbtablet *wacom)
+static int wacom_Pro2022_pen_irq(struct usbtablet *wacom, uint64 *pButtons, uint32 *toolIdx)
 {
     UBYTE *data = wacom->UsbData;
+    //struct input_dev *input = wacom->input;
+    struct wacom_features *features = &wacom->features;
+    BOOL tip, sw1, sw2, sw3, range, proximity;
+    unsigned int x, y;
+    unsigned int pressure;
+    int tilt_x, tilt_y;
+    int rotation;
+    unsigned int fingerwheel;
+    unsigned int height;
+    uint64 tool_uid;
+    unsigned int tool_type;
+    unsigned int timestamp;
+    unsigned short sequence_number;
+
+    if (delay_pen_events(wacom))
+        return 1;
+
+    tip         = data[2] & 0x01;
+    sw1         = data[2] & 0x02;
+    sw2         = data[2] & 0x04;
+    sw3         = data[2] & 0x08;
+    /* eraser   = data[2] & 0x10; */
+    /* invert   = data[2] & 0x20; */
+    range       = data[2] & 0x40;
+    proximity   = data[2] & 0x80;
+    x           = LE_INT32(*((int32 *)&data[3])) & 0xFFFFFF;
+    y           = LE_INT32(*((int32 *)&data[6])) & 0xFFFFFF;
+    pressure    = LE_INT16(*((int16 *)&data[9]));
+    tilt_x      = (char)LE_INT16(*((int16 *)&data[11]));
+    tilt_y      = (char)LE_INT16(*((int16 *)&data[13]));
+    rotation    = (int16)LE_INT16(*((int16 *)&data[15]));
+    fingerwheel = LE_INT16(*((int16 *)&data[17]));
+    height      = data[19];
+    tool_uid    = LE_INT64(*((int64 *)&data[20]));
+    tool_type   = LE_INT16(*((int16 *)&data[28]));
+    timestamp   = LE_INT16(*((int16 *)&data[30]));
+    sequence_number = LE_INT16(*((int16 *)&data[32]));
+
+    if (range) {
+        //wacom->serial[0] = (tool_uid & 0xFFFFFFFF);
+        wacom->id[0]     = ((tool_uid >> 32) & 0xFFFFF) | tool_type;
+        wacom->tool[0] = wacom_intuos_get_tool_type(wacom->id[0] & 0xFFFFF);
+    }
+
+    /* pointer going from fully "in range" to merely "in proximity" */
+    if (!range && wacom->tool[0])
+        height = wacom->features.distance_max;
+
+
+    /*
+     * only report data if there's a tool for userspace to associate
+     * the events with.
+     */
+    if (wacom->tool[0]) {
+        struct WacomState *state = &wacom->currentState;
+
+        /* Fix rotation alignment: userspace expects zero at left */
+        rotation += 1800/4;
+        if (rotation > 899)
+            rotation -= 1800;
+
+        /* Fix tilt zero-point: wacom_setup_cintiq declares 0..127, not -63..+64 */
+        tilt_x += 64;
+        tilt_y += 64;
+
+        SETBITS(*pButtons, BTN_TOUCH,    proximity ? tip           : 0);
+        SETBITS(*pButtons, BTN_STYLUS,   proximity ? sw1           : 0);
+        SETBITS(*pButtons, BTN_STYLUS2,  proximity ? sw2           : 0);
+        SETBITS(*pButtons, BTN_STYLUS3,  proximity ? sw3           : 0);
+        state->X =                     ( proximity ? x             : 0);
+        state->Y =                     ( proximity ? y             : 0);
+        state->Pressure =              ( proximity ? pressure      : 0);
+        state->tiltX =                 ( proximity ? tilt_x        : 0);
+        state->tiltY =                 ( proximity ? tilt_y        : 0);
+        state->Z =                     ( proximity ? rotation      : 0);
+        const int32 vWheel =           ( proximity ? fingerwheel   : 0);
+        SendWheelEvent(wacom, 0, vWheel, FALSE);
+        state->distance[0] =           ( proximity ? height        : 0);
+        //input_event(input, EV_MSC, MSC_TIMESTAMP, timestamp);
+
+        if (wacom->features.type != WACOM_ONE) {
+            //input_event(input, EV_MSC, MSC_SERIAL,
+            //        wacom->serial[0]);
+            *toolIdx = (proximity ?
+                     wacom_intuos_id_mangle(wacom->id[0])
+                     : 0);
+        } else {
+            *toolIdx = (proximity ?
+                     STYLUS_DEVICE_ID : 0);
+        }
+        state->proximity[0] =          ( proximity ? 1 : 0);
+
+        if (features->sequence_number != sequence_number)
+            DebugLog(0, wacom, "dropped %hu packets", sequence_number - features->sequence_number);
+
+        features->sequence_number = sequence_number + 1;
+
+        if (!proximity)
+            wacom->tool[0] = 0;
+    }
+
+    wacom->stylus_in_proximity = proximity;
+
+    return 1;
+}
+
+static void wacom_mspro_irq(struct usbtablet *wacom)
+{
+    UBYTE *data = wacom->UsbData;
+    //struct input_dev *input = wacom->input;
     uint64 buttons = 0;
     uint32 toolIdx = 0;
     int result = 0;
-    //struct input_dev *input = wacom->input;
 
     switch (data[0]) {
         case WACOM_REPORT_MSPRO:
@@ -2206,6 +2322,9 @@ static void WacomHandler_mspro(struct usbtablet *wacom)
         case WACOM_REPORT_MSPRODEVICE:
             result = wacom_mspro_device_irq(wacom);
             break;
+        case WACOM_REPORT_PRO2022:
+            result = wacom_Pro2022_pen_irq(wacom, &buttons, &toolIdx);
+            break;
         default:
             DebugLog(10, wacom, "%s: received unknown report #%d\n", __func__, data[0]);
             break;
@@ -2213,7 +2332,7 @@ static void WacomHandler_mspro(struct usbtablet *wacom)
 
     if(result)
     {
-        SendTabletEvent(0, wacom, buttons);
+        SendTabletEvent(toolIdx, wacom, buttons);
         SendMouseEvent(wacom, buttons);
         HandleExecuteActions(wacom, wacom->buttonAction, buttons);
     }
@@ -2372,7 +2491,7 @@ VOID WacomHandler( struct usbtablet *um )
                     }
                     else
                     {
-                        WacomHandler_mspro(um);
+                        wacom_mspro_irq(um);
                     }
                     break;
 
@@ -2415,7 +2534,7 @@ VOID WacomHandler( struct usbtablet *um )
                     break;
 
                 case INTUOSHT3:
-                    WacomHandler_mspro(um);
+                    wacom_mspro_irq(um);
                     break;
 
                 default:
