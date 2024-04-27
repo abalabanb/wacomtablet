@@ -131,6 +131,9 @@ struct WacomTabletBase {
     struct Library *            rmb_USBResourceBase;
     struct USBResourceIFace *   rmb_IUSBResource;
 
+    struct Library *            rmb_NewlibBase;
+    struct NewlibIFace *        rmb_INewlib;
+
     APTR                        rmb_fdkey;
 };
 
@@ -223,6 +226,8 @@ enum {
     CINTIQ_COMPANION_2,
     WACOM_MSPRO,
     CINTIQ_16,
+    WACOM_PRO2022,
+    WACOM_ONE,
     CINTIQ,
     WACOM_BEE,
     WACOM_13HD,
@@ -313,6 +318,13 @@ enum {
 
 } WacomReportID;
 
+/* device quirks */
+#define WACOM_QUIRK_BBTOUCH_LOWRES  0x0001
+#define WACOM_QUIRK_NO_INPUT        0x0002
+#define WACOM_QUIRK_MONITOR     0x0004
+#define WACOM_QUIRK_BATTERY     0x0008
+
+
 /* Wacom tool type */
 enum {
     BTN_TOOL_PEN     = 0,
@@ -339,7 +351,7 @@ enum {
 
 } WacomDeviceID;
 
-/* ABS parameters */
+/* Absolute axis names */
 enum {
     ABS_WHEEL,
     ABS_TILT_X,
@@ -352,7 +364,27 @@ enum {
     ABS_RZ,
     ABS_DISTANCE,
     ABS_THROTTLE,
-} AbsParameters;
+    ABS_PRESSURE,
+    ABS_MT_POSITION_X,
+    ABS_MT_POSITION_Y,
+    ABS_MT_TOUCH_MAJOR,
+    ABS_MT_TOUCH_MINOR,
+    ABS_MT_WIDTH_MAJOR,
+    ABS_MT_WIDTH_MINOR,
+    ABS_MT_ORIENTATION,
+
+    ABS_MAX,
+    ABS_CNT = (ABS_MAX + 1)
+} Absolute_Axis;
+
+struct absinfo {
+    int32 value;
+    int32 minimum;
+    int32 maximum;
+    int32 fuzz;
+    int32 flat;
+    int32 resolution;
+};
 
 /* Wacom BTN type */
 enum {
@@ -608,7 +640,7 @@ struct usbtablet {
     struct PrefsObjectsIFace* IPrefsObjects;
 
 
-    struct  ClassLibrary *  WindowClassLib;
+    struct ClassLibrary *   WindowClassLib;
     Class *                 WindowClassPtr;
 
     struct ClassLibrary *   LayoutClassLib;;
@@ -653,17 +685,11 @@ struct usbtablet {
     struct Gadget*          gadgets[GID_LAST];
     
     // features & capabilities
-    struct wacom_features*  features;
+    struct wacom_features   features;
     uint64                  buttonCapabilities;
     uint64                  toolCapabilities;
     uint8                   touch_arbitration;
-    int32                   minX, maxX, fuzzX;
-    int32                   minY, maxY, fuzzY;
-    int32                   minZ, maxZ, fuzzZ;
-    int32                   minWheel, maxWheel, fuzzWheel;
-    int32                   minThrottle, maxThrottle, fuzzThrottle;
-    int32                   minTiltX, maxTiltX, fuzzTiltX;
-    int32                   minTiltY, maxTiltY, fuzzTiltY;
+    struct absinfo          absinfo[ABS_CNT];
 
     struct ButtonAction     buttonAction[BUTTON_ACTION_SIZE];
     UWORD                   Curve[7];
@@ -748,9 +774,21 @@ uint32                  SendRawKeyEvent(struct usbtablet *um, uint32 buttons);
 uint32                  HandleExecuteActions(struct usbtablet *ut, struct ButtonAction buttonAction[], uint64 buttons);
 
 void                    WacomSetupCapabilities(struct usbtablet *um);
+void                    wacom_setup_device_quirks(struct usbtablet *wacom);
+
 CONST_STRPTR            GetString(struct LocaleInfo *li, LONG stringNum);
 
-void                    SetAbsParams(struct usbtablet *um, int32 paramName, int32 min, int32 max, int32 fuzz, int32 flat);
+void                    input_set_abs_params(struct usbtablet *um, uint32 axis, int32 min, int32 max, int32 fuzz, int32 flat);
+#define INPUT_DECLARE_ABS_ACCESSORS(_suffix) \
+int32                   input_abs_get_##_suffix(struct usbtablet *dev, uint32 axis); \
+void                    input_abs_set_##_suffix(struct usbtablet *dev, uint32 axis, int32 val);
+
+INPUT_DECLARE_ABS_ACCESSORS(val)
+INPUT_DECLARE_ABS_ACCESSORS(min)
+INPUT_DECLARE_ABS_ACCESSORS(max)
+INPUT_DECLARE_ABS_ACCESSORS(fuzz)
+INPUT_DECLARE_ABS_ACCESSORS(flat)
+INPUT_DECLARE_ABS_ACCESSORS(res)
 
 ////
 

@@ -99,9 +99,9 @@ BOOL SetupCX(struct usbtablet *um)
 
     ShutdownCX(um);   /* shutdown previous and restart from scratch */
 
-    if(um->features)
+    if(um->features.name)
     {
-        mynb.nb_Name = (STRPTR)um->features->name;
+        mynb.nb_Name = (STRPTR)um->features.name;
     }
 
     if(!(um->CXPort = (struct MsgPort*)um->IExec->AllocSysObject(ASOT_PORT, NULL)))

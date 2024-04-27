@@ -270,7 +270,7 @@ Object *CreateWindow(struct usbtablet *um)
 
                     LAYOUT_AddChild, um->IIntuition->NewObject(um->StringClassPtr, NULL,
                         GA_ReadOnly,TRUE,
-                        STRINGA_TextVal, um->features->name,
+                        STRINGA_TextVal, um->features.name,
                         TAG_END),
                     CHILD_Label,um->IIntuition->NewObject(um->LabelClassPtr,NULL,
                         LABEL_Text, GetString(&um->localeInfo, MSG_TAB_MISC_DETECTED),
